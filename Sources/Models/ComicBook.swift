@@ -12,11 +12,25 @@ public struct ComicPanel: Identifiable, Codable, Equatable {
     public var id: UUID
     public var rect: CGRect
     public var order: Int
+    public var polygonPoints: [CGPoint]?
     
-    public init(id: UUID = UUID(), rect: CGRect, order: Int) {
+    public init(id: UUID = UUID(), rect: CGRect, order: Int, polygonPoints: [CGPoint]? = nil) {
         self.id = id
         self.rect = rect
         self.order = order
+        self.polygonPoints = polygonPoints
+    }
+    
+    public func getPoints() -> [CGPoint] {
+        if let pts = polygonPoints, pts.count == 4 {
+            return pts
+        }
+        return [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.maxY),
+            CGPoint(x: rect.minX, y: rect.maxY)
+        ]
     }
 }
 
@@ -57,5 +71,11 @@ public struct ComicBook: Identifiable, Codable, Equatable {
         self.readingDirection = readingDirection
         self.pages = pages
         self.isCustomImported = isCustomImported
+    }
+}
+
+extension Collection {
+    public subscript(safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }

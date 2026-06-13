@@ -26,12 +26,10 @@ public struct PageMiniMap: View {
                     
                     ForEach(0..<page.panels.count, id: \.self) { idx in
                         let panel = page.panels[idx]
-                        let rect = panel.rect
-                        
-                        let px = rect.origin.x * w
-                        let py = rect.origin.y * h
-                        let pw = rect.size.width * w
-                        let ph = rect.size.height * h
+                        let pts = panel.getPoints()
+                        let screenPoints = pts.map { p in
+                            CGPoint(x: p.x * w, y: p.y * h)
+                        }
                         
                         let isActive = idx == activePanelIndex
                         
@@ -39,20 +37,26 @@ public struct PageMiniMap: View {
                         let lineWidth: CGFloat = isActive ? 1.5 : 0.5
                         let fillColor = isActive ? Color.cyan.opacity(0.15) : Color.clear
                         let shadowColor = isActive ? Color.cyan.opacity(0.4) : Color.clear
-                        let posX = px + pw / 2
-                        let posY = py + ph / 2
-                        let pwVal = max(2, pw)
-                        let phVal = max(2, ph)
                         
                         ZStack {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(fillColor)
+                            Path { path in
+                                path.move(to: screenPoints[0])
+                                path.addLine(to: screenPoints[1])
+                                path.addLine(to: screenPoints[2])
+                                path.addLine(to: screenPoints[3])
+                                path.closeSubpath()
+                            }
+                            .fill(fillColor)
                             
-                            RoundedRectangle(cornerRadius: 2)
-                                .stroke(strokeColor, lineWidth: lineWidth)
+                            Path { path in
+                                path.move(to: screenPoints[0])
+                                path.addLine(to: screenPoints[1])
+                                path.addLine(to: screenPoints[2])
+                                path.addLine(to: screenPoints[3])
+                                path.closeSubpath()
+                            }
+                            .stroke(strokeColor, lineWidth: lineWidth)
                         }
-                        .frame(width: pwVal, height: phVal)
-                        .position(x: posX, y: posY)
                         .shadow(color: shadowColor, radius: 2)
                     }
                 }

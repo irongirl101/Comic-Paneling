@@ -50,9 +50,12 @@ public class SampleComicBuilder {
                 pageNumber: 1,
                 imagePath: agPage1,
                 panels: [
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.02, y: 0.02, width: 0.96, height: 0.29), order: 0),
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.02, y: 0.33, width: 0.96, height: 0.31), order: 1),
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.02, y: 0.66, width: 0.96, height: 0.32), order: 2)
+                    // Panel 1: Top strip — lab scientist looking at reactor
+                    ComicPanel(id: UUID(), rect: CGRect(x: 0.04, y: 0.04, width: 0.92, height: 0.28), order: 0),
+                    // Panel 2: Middle strip — KA-BOOM explosion
+                    ComicPanel(id: UUID(), rect: CGRect(x: 0.04, y: 0.35, width: 0.92, height: 0.30), order: 1),
+                    // Panel 3: Bottom strip — scientist floating
+                    ComicPanel(id: UUID(), rect: CGRect(x: 0.04, y: 0.68, width: 0.92, height: 0.28), order: 2)
                 ],
                 isCustomImported: false
             )
@@ -80,17 +83,52 @@ public class SampleComicBuilder {
                 pageNumber: 1,
                 imagePath: cbPage1,
                 panels: [
-                    // Right-to-Left (Manga) read sequence:
-                    // 1. Top-Right: Ninja leaping
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.45, y: 0.02, width: 0.53, height: 0.32), order: 0),
-                    // 2. Top-Left: Text building
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.02, y: 0.02, width: 0.41, height: 0.32), order: 1),
-                    // 3. Middle-Right: Cityscape/cars
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.54, y: 0.36, width: 0.44, height: 0.29), order: 2),
-                    // 4. Middle-Left: Ninja crawling in vent
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.02, y: 0.36, width: 0.50, height: 0.29), order: 3),
-                    // 5. Bottom: Visor close-up
-                    ComicPanel(id: UUID(), rect: CGRect(x: 0.02, y: 0.67, width: 0.96, height: 0.31), order: 4)
+                    // Panel 1 (read first): Top full-width — ninja leaping across city skyline
+                    // Rect spans full width, top third of page
+                    ComicPanel(
+                        id: UUID(),
+                        rect: CGRect(x: 0.04, y: 0.04, width: 0.92, height: 0.32),
+                        order: 0
+                    ),
+                    // Panel 2 (read second): Middle-LEFT — ninja crawling through vent
+                    // Right border is SLANTED: top-right corner is higher than bottom-right
+                    ComicPanel(
+                        id: UUID(),
+                        rect: CGRect(x: 0.04, y: 0.37, width: 0.46, height: 0.32),
+                        order: 1,
+                        polygonPoints: [
+                            CGPoint(x: 0.04, y: 0.37),  // top-left
+                            CGPoint(x: 0.52, y: 0.37),  // top-right (slant starts here)
+                            CGPoint(x: 0.48, y: 0.69),  // bottom-right (slant ends here)
+                            CGPoint(x: 0.04, y: 0.69)   // bottom-left
+                        ]
+                    ),
+                    // Panel 3 (read third): Middle-RIGHT — city/NEON sign scene
+                    // Left border is the same slant as panel 2's right border
+                    ComicPanel(
+                        id: UUID(),
+                        rect: CGRect(x: 0.48, y: 0.37, width: 0.48, height: 0.32),
+                        order: 2,
+                        polygonPoints: [
+                            CGPoint(x: 0.52, y: 0.37),  // top-left (matches panel 2 top-right)
+                            CGPoint(x: 0.96, y: 0.37),  // top-right
+                            CGPoint(x: 0.96, y: 0.69),  // bottom-right
+                            CGPoint(x: 0.48, y: 0.69)   // bottom-left (matches panel 2 bottom-right)
+                        ]
+                    ),
+                    // Panel 4 (read last): Bottom full-width — visor close-up
+                    // Top border has a slight slant matching the middle panels' bottom
+                    ComicPanel(
+                        id: UUID(),
+                        rect: CGRect(x: 0.04, y: 0.70, width: 0.92, height: 0.26),
+                        order: 3,
+                        polygonPoints: [
+                            CGPoint(x: 0.04, y: 0.70),  // top-left
+                            CGPoint(x: 0.96, y: 0.70),  // top-right
+                            CGPoint(x: 0.96, y: 0.96),  // bottom-right
+                            CGPoint(x: 0.04, y: 0.96)   // bottom-left
+                        ]
+                    )
                 ],
                 isCustomImported: false
             )
@@ -101,7 +139,7 @@ public class SampleComicBuilder {
             title: "Cyberpunk Shadow",
             author: "M. Tanaka",
             coverImagePath: cbCover,
-            readingDirection: .rightToLeft,
+            readingDirection: .leftToRight,
             pages: cbPages,
             isCustomImported: false
         )
