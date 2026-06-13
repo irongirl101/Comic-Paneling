@@ -10,9 +10,7 @@ public enum ReadingDirection: String, Codable, CaseIterable, Identifiable {
 
 public struct ComicPanel: Identifiable, Codable, Equatable {
     public var id: UUID
-    /// Bounding box normalized relative to the page dimensions (values between 0.0 and 1.0)
     public var rect: CGRect
-    /// The order in which the panel is read
     public var order: Int
     
     public init(id: UUID = UUID(), rect: CGRect, order: Int) {
@@ -25,11 +23,7 @@ public struct ComicPanel: Identifiable, Codable, Equatable {
 public struct ComicPage: Identifiable, Codable, Equatable {
     public var id: UUID
     public var pageNumber: Int
-    /// Path or name of the image asset.
-    /// For pre-packaged assets: name of the asset in bundle.
-    /// For custom imported comics: full file URL to local sandbox folder.
     public var imagePath: String
-    /// Panel metadata, sorted by read order.
     public var panels: [ComicPanel]
     public var isCustomImported: Bool
     

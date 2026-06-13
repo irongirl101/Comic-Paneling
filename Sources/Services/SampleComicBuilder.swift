@@ -3,9 +3,7 @@ import CoreGraphics
 
 public class SampleComicBuilder {
     
-    /// Resolves the absolute path of a resource, checking bundle metadata and source fallbacks.
     public static func findResourcePath(subpath: String) -> String {
-        // Try searching the module bundle (Xcode / Playgrounds)
         #if SWIFT_PACKAGE
         let bundle = Bundle.module
         let url = URL(fileURLWithPath: subpath)
@@ -16,15 +14,12 @@ public class SampleComicBuilder {
         if let path = bundle.path(forResource: filename, ofType: ext, inDirectory: directory) {
             return path
         }
-        // Fallback inside Bundle
         if let path = bundle.path(forResource: filename, ofType: ext, inDirectory: url.deletingLastPathComponent().path) {
             return path
         }
         #endif
         
         let fileManager = FileManager.default
-        
-        // Fallback: search source tree relative to working directory (for terminal `swift run`)
         let srcPaths = [
             "Sources/Resources/\(subpath)",
             "./Sources/Resources/\(subpath)",
@@ -37,7 +32,6 @@ public class SampleComicBuilder {
             }
         }
         
-        // Print warning if not found
         print("WARNING: Resource path not found for \(subpath)")
         return ""
     }

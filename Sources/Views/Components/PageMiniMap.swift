@@ -12,16 +12,14 @@ public struct PageMiniMap: View {
     public var body: some View {
         VStack(spacing: 4) {
             ZStack {
-                // Mini page representation (aspect ratio 2:3)
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.black.opacity(0.6))
+                    .fill(Color.black.opacity(0.65))
                     .frame(width: 80, height: 120)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
                     )
                 
-                // Draw panel outlines
                 GeometryReader { geo in
                     let w = geo.size.width
                     let h = geo.size.height
@@ -37,10 +35,10 @@ public struct PageMiniMap: View {
                         
                         let isActive = idx == activePanelIndex
                         
-                        let strokeColor = isActive ? Color.cyan : Color.white.opacity(0.4)
+                        let strokeColor = isActive ? Color.cyan : Color.white.opacity(0.35)
                         let lineWidth: CGFloat = isActive ? 1.5 : 0.5
                         let fillColor = isActive ? Color.cyan.opacity(0.15) : Color.clear
-                        let shadowColor = isActive ? Color.cyan.opacity(0.5) : Color.clear
+                        let shadowColor = isActive ? Color.cyan.opacity(0.4) : Color.clear
                         let posX = px + pw / 2
                         let posY = py + ph / 2
                         let pwVal = max(2, pw)
@@ -63,7 +61,7 @@ public struct PageMiniMap: View {
             
             Text("Page \(page.pageNumber)")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(.white.opacity(0.5))
         }
         .padding(6)
         .background(
@@ -72,7 +70,7 @@ public struct PageMiniMap: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
         .shadow(radius: 4)
     }

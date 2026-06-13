@@ -4,8 +4,7 @@ import PackageDescription
 let package = Package(
     name: "ComicPanelReader",
     platforms: [
-        .macOS(.v14),
-        .iOS(.v17)
+        .macOS(.v14)
     ],
     products: [
         .executable(name: "ComicPanelReader", targets: ["ComicPanelReader"])

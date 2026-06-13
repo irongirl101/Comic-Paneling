@@ -1,10 +1,5 @@
 import SwiftUI
-
-#if canImport(UIKit)
-import UIKit
-#elseif canImport(AppKit)
 import AppKit
-#endif
 
 public struct ComicImage: View {
     public var path: String
@@ -14,35 +9,24 @@ public struct ComicImage: View {
     }
     
     public var body: some View {
-        #if canImport(UIKit)
-        if let uiImage = UIImage(contentsOfFile: path) {
-            Image(uiImage: uiImage)
-                .resizable()
-        } else {
-            fallbackView
-        }
-        #elseif canImport(AppKit)
         if let nsImage = NSImage(contentsOfFile: path) {
             Image(nsImage: nsImage)
                 .resizable()
         } else {
             fallbackView
         }
-        #else
-        fallbackView
-        #endif
     }
     
     private var fallbackView: some View {
         ZStack {
-            Color.gray.opacity(0.15)
+            Color.white.opacity(0.04)
             VStack(spacing: 8) {
                 Image(systemName: "photo.badge.plus")
                     .font(.system(size: 24))
                 Text("Missing Page")
                     .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundColor(.white.opacity(0.4))
+            .foregroundColor(.white.opacity(0.3))
         }
     }
 }
@@ -50,6 +34,7 @@ public struct ComicImage: View {
 public struct ComicCard: View {
     public var book: ComicBook
     public var progress: ComicProgress
+    @State private var isHovered = false
     
     public init(book: ComicBook, progress: ComicProgress) {
         self.book = book
@@ -59,31 +44,29 @@ public struct ComicCard: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
-                // Book Cover
                 ComicImage(path: book.coverImagePath)
                     .aspectRatio(2/3, contentMode: .fit)
-                    .cornerRadius(12)
-                    .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
+                    .cornerRadius(10)
+                    .shadow(color: Color.black.opacity(isHovered ? 0.5 : 0.35), radius: isHovered ? 12 : 6, x: 0, y: isHovered ? 6 : 3)
                 
-                // Reading progress percent bubble
                 if percentRead > 0 {
                     Text("\(Int(percentRead * 100))%")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
                         .background(
                             Capsule()
-                                .fill(percentRead >= 1.0 ? Color.green.opacity(0.85) : Color.blue.opacity(0.85))
+                                .fill(percentRead >= 1.0 ? Color.green.opacity(0.8) : Color.blue.opacity(0.8))
                         )
-                        .padding(8)
+                        .padding(6)
                 }
             }
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(isHovered ? .cyan : .white)
                     .lineLimit(1)
                 
                 Text(book.author)
@@ -91,42 +74,45 @@ public struct ComicCard: View {
                     .foregroundColor(.gray)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 2)
             
-            // Progress Bar
             if percentRead > 0 {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.white.opacity(0.1))
-                            .frame(height: 5)
+                        RoundedRectangle(cornerRadius: 2.5)
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 4)
                         
-                        RoundedRectangle(cornerRadius: 3)
+                        RoundedRectangle(cornerRadius: 2.5)
                             .fill(LinearGradient(
                                 colors: [Color.blue, Color.cyan],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             ))
-                            .frame(width: geo.size.width * CGFloat(percentRead), height: 5)
+                            .frame(width: geo.size.width * CGFloat(percentRead), height: 4)
                     }
                 }
-                .frame(height: 5)
-                .padding(.horizontal, 4)
+                .frame(height: 4)
+                .padding(.horizontal, 2)
             }
         }
-        .frame(width: 140)
+        .frame(width: 130)
         .padding(8)
-        .background(Color.white.opacity(0.02))
-        .cornerRadius(16)
+        .background(isHovered ? Color.white.opacity(0.04) : Color.white.opacity(0.01))
+        .cornerRadius(14)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.white.opacity(0.04), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(isHovered ? Color.cyan.opacity(0.3) : Color.white.opacity(0.03), lineWidth: 1)
         )
+        .scaleEffect(isHovered ? 1.03 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
     
     private var percentRead: Double {
         guard !book.pages.isEmpty else { return 0 }
-        
         let totalPanels = book.totalPanelsCount
         guard totalPanels > 0 else { return 0 }
         
@@ -134,7 +120,6 @@ public struct ComicCard: View {
             return 1.0
         }
         
-        // Calculate reading index
         var readCount = 0
         for (pIdx, page) in book.pages.enumerated() {
             if pIdx < progress.currentPageIndex {
