@@ -1,0 +1,34 @@
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+
+# Swift Package Manager Build Artifacts
+.build/
+Packages/
+Package.pins
+Package.resolved
+.swift-version
+
+# Swift Playgrounds / Xcode User Configurations
+.swiftpm/xcode/
+.swiftpm/configuration/
+!.swiftpm/configuration/Playgrounds.plist
+
+# Xcode / DerivedData / Build Artifacts
+build/
+DerivedData/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+xcuserdata/
+
+# Backup & Temp Files
+*.swp
+*~
+*.tmp
+*.bak
