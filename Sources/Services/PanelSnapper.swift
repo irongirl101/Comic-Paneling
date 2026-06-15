@@ -85,10 +85,11 @@ public class PanelSnapper {
             return Int(p0.x + t * (p1.x - p0.x))
         }
 
-        // ── 4. Per-row scan: find left and right artwork edges ─────────────────
-        // For each row we scan a small window that starts OUTSIDE the polygon
-        // boundary (in the gutter) and moves INWARD until hitting artwork.
-        let bufPx = max(4, Int(Double(W) * 0.04))  // 4% of image width as gutter buffer
+        // ── 4. Per-row scan: find left and right artwork edges using transition-based matching ─
+        // We look for the exact transition between gutter and artwork in a narrow search window.
+        // This is extremely robust and prevents drifting or merging into adjacent panels.
+        let scanWidth = max(15, Int(Double(W) * 0.02)) // 2% of width as search window
+        let scanHeight = max(15, Int(Double(H) * 0.02)) // 2% of height as search window
 
         var rowLeftEdge  = [Int](repeating: -1, count: H)
         var rowRightEdge = [Int](repeating: -1, count: H)
@@ -97,28 +98,36 @@ public class PanelSnapper {
             let polyLeft  = lerpX(y, from: tl, to: bl)
             let polyRight = lerpX(y, from: tr, to: br)
 
-            // --- Left edge: scan right-ward from outside the polygon ---
-            let scanLStart = max(0, polyLeft - bufPx)
-            let scanLEnd   = min(W - 1, polyLeft + bufPx)
-            var leftFound  = polyLeft  // fallback: use initial polygon estimate
+            // --- Left edge: find transition from gutter (true) to artwork (false) ---
+            let scanLStart = max(0, polyLeft - scanWidth)
+            let scanLEnd   = min(W - 1, polyLeft + scanWidth)
+            var leftFound  = polyLeft
 
-            for x in scanLStart...scanLEnd {
-                if !isGutter(x, y) {
-                    leftFound = x
-                    break
+            var bestLDist = Double.infinity
+            for x in scanLStart..<scanLEnd {
+                if isGutter(x, y) && !isGutter(x + 1, y) {
+                    let dist = abs(Double(x + 1) - Double(polyLeft))
+                    if dist < bestLDist {
+                        bestLDist = dist
+                        leftFound = x + 1
+                    }
                 }
             }
             rowLeftEdge[y] = leftFound
 
-            // --- Right edge: scan left-ward from outside the polygon ---
-            let scanRStart = min(W - 1, polyRight + bufPx)
-            let scanREnd   = max(0, polyRight - bufPx)
-            var rightFound = polyRight  // fallback
+            // --- Right edge: find transition from artwork (false) to gutter (true) ---
+            let scanRStart = max(0, polyRight - scanWidth)
+            let scanREnd   = min(W - 1, polyRight + scanWidth)
+            var rightFound = polyRight
 
-            for x in stride(from: scanRStart, through: scanREnd, by: -1) {
-                if !isGutter(x, y) {
-                    rightFound = x
-                    break
+            var bestRDist = Double.infinity
+            for x in scanRStart..<scanREnd {
+                if !isGutter(x, y) && isGutter(x + 1, y) {
+                    let dist = abs(Double(x) - Double(polyRight))
+                    if dist < bestRDist {
+                        bestRDist = dist
+                        rightFound = x
+                    }
                 }
             }
             rowRightEdge[y] = rightFound
@@ -127,20 +136,38 @@ public class PanelSnapper {
         // ── 5. Per-column scan: find top and bottom artwork edges ──────────────
 
         func topBot(col x: Int) -> (top: Int, bot: Int) {
-            // Top: scan down from outside
-            let scanTStart = max(0, topY - bufPx)
-            let scanTEnd   = min(H - 1, topY + bufPx)
+            // Top: find transition from gutter (true) to artwork (false)
+            let scanTStart = max(0, topY - scanHeight)
+            let scanTEnd   = min(H - 1, topY + scanHeight)
             var topFound   = topY
-            for y in scanTStart...scanTEnd {
-                if !isGutter(x, y) { topFound = y; break }
+
+            var bestTDist = Double.infinity
+            for y in scanTStart..<scanTEnd {
+                if isGutter(x, y) && !isGutter(x, y + 1) {
+                    let dist = abs(Double(y + 1) - Double(topY))
+                    if dist < bestTDist {
+                        bestTDist = dist
+                        topFound = y + 1
+                    }
+                }
             }
-            // Bottom: scan up from outside
-            let scanBStart = min(H - 1, botY + bufPx)
-            let scanBEnd   = max(0, botY - bufPx)
+
+            // Bottom: find transition from artwork (false) to gutter (true)
+            let scanBStart = max(0, botY - scanHeight)
+            let scanBEnd   = min(H - 1, botY + scanHeight)
             var botFound   = botY
-            for y in stride(from: scanBStart, through: scanBEnd, by: -1) {
-                if !isGutter(x, y) { botFound = y; break }
+
+            var bestBDist = Double.infinity
+            for y in scanBStart..<scanBEnd {
+                if !isGutter(x, y) && isGutter(x, y + 1) {
+                    let dist = abs(Double(y) - Double(botY))
+                    if dist < bestBDist {
+                        bestBDist = dist
+                        botFound = y
+                    }
+                }
             }
+
             return (topFound, botFound)
         }
 
