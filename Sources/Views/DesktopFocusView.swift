@@ -40,6 +40,44 @@ public struct DesktopFocusView: View {
                     .frame(width: containerSize.width, height: containerSize.height)
                     .scaleEffect(targetScale)
                     .offset(x: offsetX, y: offsetY)
+                
+                // Top edge blur - soft and glasslike
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .frame(height: 80)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white, location: 0.0),
+                                .init(color: .white, location: 0.25), // top 20px is fully blurred
+                                .init(color: .white.opacity(0.5), location: 0.6),
+                                .init(color: .clear, location: 1.0)   // feathers out softly
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .allowsHitTesting(false)
+                
+                // Bottom edge blur - soft and glasslike
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .frame(height: 80)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: .white.opacity(0.5), location: 0.4),
+                                .init(color: .white, location: 0.75), // bottom 20px is fully blurred
+                                .init(color: .white, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .allowsHitTesting(false)
             }
             .frame(width: containerSize.width, height: containerSize.height)
             .clipped()

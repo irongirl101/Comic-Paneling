@@ -11,7 +11,7 @@ public class ComicImporter {
     
     public static var comicsDirectory: URL {
         let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-        let appSupportDir = paths[0].appendingPathComponent("ComicPanelReader", isDirectory: true)
+        let appSupportDir = paths[0].appendingPathComponent("Panels", isDirectory: true)
         let dir = appSupportDir.appendingPathComponent("Comics", isDirectory: true)
         
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
@@ -26,6 +26,14 @@ public class ComicImporter {
         try FileManager.default.createDirectory(at: bookDir, withIntermediateDirectories: true, attributes: nil)
         
         let fileManager = FileManager.default
+        
+        let isSecurityScoped = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if isSecurityScoped {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        
         try fileManager.unzipItem(at: fileURL, to: bookDir)
         
         var imageURLs: [URL] = []

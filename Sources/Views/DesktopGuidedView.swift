@@ -1,5 +1,7 @@
 import SwiftUI
 import CoreGraphics
+import AppKit
+
 
 // A simple polygon shape that maps 4 normalized [0,1] points to the shape's own local rect.
 // This means if you give it a frame of fitImageSize, it renders the polygon pixel-perfectly
@@ -179,6 +181,8 @@ public struct DesktopGuidedView: View {
                     renderOffsetX: renderOffsetX,
                     renderOffsetY: renderOffsetY
                 )
+
+
 
                 // ── 5. Live calibration handles (adjust mode only) ───────────────
                 if isAdjusting {

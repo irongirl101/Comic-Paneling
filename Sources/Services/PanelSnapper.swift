@@ -35,21 +35,35 @@ public class PanelSnapper {
             data: &raw, width: W, height: H,
             bitsPerComponent: 8, bytesPerRow: bpr,
             space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue  // Y=0 at top
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return points }
 
+        // Core Graphics has Y=0 at the BOTTOM by default.
+        // Apply a flip transform so the image is drawn top-down into the buffer:
+        //   buffer row 0 = visual top of image (ny=0)
+        //   buffer row H-1 = visual bottom of image (ny=1)
+        // Without this, all y-coordinate lookups read the wrong rows (upside-down).
+        ctx.translateBy(x: 0, y: CGFloat(H))
+        ctx.scaleBy(x: 1, y: -1)
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: W, height: H))
 
-        // ── 1. Detect gutter color from outer page edges ───────────────────────
-        let bg = detectGutterColor(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp)
-        let tol = 40.0
+        // ── 1. Determine if background is dark or light, and define gutter test ─
+        let isDarkBg = isPageBackgroundDark(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp)
 
         func isGutter(_ x: Int, _ y: Int) -> Bool {
             guard x >= 0, x < W, y >= 0, y < H else { return true }
             let o = y * bpr + x * bpp
-            return abs(Double(raw[o])   - bg.r) < tol
-                && abs(Double(raw[o+1]) - bg.g) < tol
-                && abs(Double(raw[o+2]) - bg.b) < tol
+            let r = Double(raw[o])
+            let g = Double(raw[o+1])
+            let b = Double(raw[o+2])
+            
+            if isDarkBg {
+                let tol = 50.0
+                return r < tol && g < tol && b < tol
+            } else {
+                let threshold = 205.0
+                return r > threshold && g > threshold && b > threshold
+            }
         }
 
         // ── 2. Polygon corners in pixel space ─────────────────────────────────
@@ -111,8 +125,6 @@ public class PanelSnapper {
         }
 
         // ── 5. Per-column scan: find top and bottom artwork edges ──────────────
-        let leftY  = Int(min(tl.x, bl.x))   // leftmost column to scan
-        let rightY = Int(max(tr.x, br.x))   // rightmost column to scan
 
         func topBot(col x: Int) -> (top: Int, bot: Int) {
             // Top: scan down from outside
@@ -178,20 +190,19 @@ public class PanelSnapper {
         ]
     }
 
-    // MARK: - Gutter Color Detection
-
-    private static func detectGutterColor(
-        raw: [UInt8], W: Int, H: Int, bpr: Int, bpp: Int
-    ) -> (r: Double, g: Double, b: Double) {
-        var rs: [Double] = [], gs: [Double] = [], bs: [Double] = []
-
+    private static func isPageBackgroundDark(raw: [UInt8], W: Int, H: Int, bpr: Int, bpp: Int) -> Bool {
+        var brightnesses: [Double] = []
+        
         func sample(_ x: Int, _ y: Int) {
             guard x >= 0, x < W, y >= 0, y < H else { return }
             let o = y * bpr + x * bpp
             guard o + 2 < raw.count else { return }
-            rs.append(Double(raw[o])); gs.append(Double(raw[o+1])); bs.append(Double(raw[o+2]))
+            let r = Double(raw[o])
+            let g = Double(raw[o+1])
+            let b = Double(raw[o+2])
+            brightnesses.append((r + g + b) / 3.0)
         }
-
+        
         let xStep = max(1, W / 60), yStep = max(1, H / 60)
         for x in stride(from: 0, to: W, by: xStep) {
             for d in 0...4 { sample(x, d); sample(x, H-1-d) }
@@ -199,10 +210,9 @@ public class PanelSnapper {
         for y in stride(from: 0, to: H, by: yStep) {
             for d in 0...4 { sample(d, y); sample(W-1-d, y) }
         }
-
-        guard !rs.isEmpty else { return (240, 240, 240) }
-        rs.sort(); gs.sort(); bs.sort()
-        let idx = min(rs.count - 1, (rs.count * 3) / 4)   // 75th percentile
-        return (rs[idx], gs[idx], bs[idx])
+        
+        guard !brightnesses.isEmpty else { return false }
+        brightnesses.sort()
+        return brightnesses[brightnesses.count / 2] < 80.0
     }
 }

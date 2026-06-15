@@ -53,7 +53,7 @@ public struct LibraryGridView: View {
                             importDirection = .leftToRight
                             importError = nil
                             droppedFileURL = nil
-                            showImportSheet = true
+                            showFilePicker = true
                         }
                     }
                     .padding(.horizontal)
@@ -159,14 +159,16 @@ public struct LibraryGridView: View {
             isDraggingOver = false
             guard let firstUrl = urls.first else { return false }
             let ext = firstUrl.pathExtension.lowercased()
-            if ext == "zip" || ext == "cbz" {
-                importTitle = firstUrl.deletingPathExtension().lastPathComponent
-                importAuthor = "Finder Drag-and-Drop"
-                importDirection = .leftToRight
-                importError = nil
-                droppedFileURL = firstUrl
-                showImportSheet = true
-                return true
+            if ext == "zip" || ext == "cbz" || ext == "cbr" {
+                if let tempURL = copyToTempDirectory(fileURL: firstUrl) {
+                    importTitle = firstUrl.deletingPathExtension().lastPathComponent
+                    importAuthor = ""
+                    importDirection = .leftToRight
+                    importError = nil
+                    droppedFileURL = tempURL
+                    showImportSheet = true
+                    return true
+                }
             }
             return false
         } isTargeted: { targeted in
@@ -204,15 +206,13 @@ public struct LibraryGridView: View {
                                 Spacer()
                             }
                         } else {
-                            Button("Select File & Complete Import") {
+                            Button("Complete Import") {
                                 if importTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     importError = "Please enter a book title first."
-                                } else if let droppedURL = droppedFileURL {
-                                    // Complete drag and drop file import
-                                    performFileImport(fileURL: droppedURL)
+                                } else if let tempURL = droppedFileURL {
+                                    performFileImport(fileURL: tempURL)
                                 } else {
-                                    importError = nil
-                                    showFilePicker = true
+                                    importError = "No file selected."
                                 }
                             }
                             .foregroundColor(.cyan)
@@ -226,6 +226,7 @@ public struct LibraryGridView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") {
+                            cleanupTempFile()
                             showImportSheet = false
                         }
                     }
@@ -236,15 +237,29 @@ public struct LibraryGridView: View {
         }
         .fileImporter(
             isPresented: $showFilePicker,
-            allowedContentTypes: [.zip, UTType(filenameExtension: "cbz") ?? .zip],
+            allowedContentTypes: [
+                .zip,
+                UTType(filenameExtension: "cbz", conformingTo: .zip) ?? .zip,
+                UTType(filenameExtension: "cbr", conformingTo: .data) ?? .data
+            ],
             allowsMultipleSelection: false
         ) { result in
             switch result {
             case .success(let urls):
                 guard let fileURL = urls.first else { return }
-                performFileImport(fileURL: fileURL)
+                if let tempURL = copyToTempDirectory(fileURL: fileURL) {
+                    importTitle = fileURL.deletingPathExtension().lastPathComponent
+                    importAuthor = ""
+                    importDirection = .leftToRight
+                    droppedFileURL = tempURL
+                    showImportSheet = true
+                } else {
+                    importError = "Failed to copy file for processing."
+                    showImportSheet = true
+                }
             case .failure(let error):
                 importError = "File picker failed: \(error.localizedDescription)"
+                showImportSheet = true
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("trigger_comic_import"))) { _ in
@@ -253,7 +268,7 @@ public struct LibraryGridView: View {
             importDirection = .leftToRight
             importError = nil
             droppedFileURL = nil
-            showImportSheet = true
+            showFilePicker = true
         }
     }
     
@@ -261,6 +276,38 @@ public struct LibraryGridView: View {
         self.sampleComics = SampleComicBuilder.buildSampleComics()
         self.importedComics = ComicImporter.shared.loadImportedComics()
         progressManager.loadProgress()
+    }
+    
+    private func copyToTempDirectory(fileURL: URL) -> URL? {
+        let accessSecurityScoped = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessSecurityScoped {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        let fileManager = FileManager.default
+        let tempDir = fileManager.temporaryDirectory
+        let uniqueFileName = UUID().uuidString + "_" + fileURL.lastPathComponent
+        let targetURL = tempDir.appendingPathComponent(uniqueFileName)
+        
+        do {
+            if fileManager.fileExists(atPath: targetURL.path) {
+                try? fileManager.removeItem(at: targetURL)
+            }
+            try fileManager.copyItem(at: fileURL, to: targetURL)
+            return targetURL
+        } catch {
+            print("Failed to copy file to temp directory: \(error)")
+            return nil
+        }
+    }
+    
+    private func cleanupTempFile() {
+        if let tempURL = droppedFileURL {
+            try? FileManager.default.removeItem(at: tempURL)
+            droppedFileURL = nil
+        }
     }
     
     private func performFileImport(fileURL: URL) {
@@ -276,10 +323,15 @@ public struct LibraryGridView: View {
                 )
                 
                 loadAllComics()
+                cleanupTempFile()
                 isImporting = false
                 showImportSheet = false
             } catch {
-                importError = "Import failed: \(error.localizedDescription)"
+                if fileURL.pathExtension.lowercased() == "cbr" {
+                    importError = "Import failed: .cbr files (RAR archives) are not natively supported. Please convert/repack the archive as a ZIP (.cbz) file."
+                } else {
+                    importError = "Import failed: \(error.localizedDescription)"
+                }
                 isImporting = false
             }
         }
