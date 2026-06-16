@@ -23,6 +23,62 @@ public class PanelDetector {
         }
     }
 
+    // MARK: - Optimization Helpers
+
+    private static func getDownscaledRawBuffer(
+        from cgImage: CGImage,
+        maxDimension: CGFloat = 1024.0
+    ) -> (raw: [UInt8], width: Int, height: Int, bytesPerRow: Int)? {
+        let W = cgImage.width
+        let H = cgImage.height
+        
+        let scale = min(1.0, maxDimension / CGFloat(max(W, H)))
+        let targetW = max(4, Int(CGFloat(W) * scale))
+        let targetH = max(4, Int(CGFloat(H) * scale))
+        
+        let bpp = 4
+        let bpr = bpp * targetW
+        var raw = [UInt8](repeating: 0, count: targetH * bpr)
+        
+        guard let ctx = CGContext(
+            data: &raw, width: targetW, height: targetH,
+            bitsPerComponent: 8, bytesPerRow: bpr,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+        
+        ctx.interpolationQuality = .medium
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: targetW, height: targetH))
+        
+        return (raw, targetW, targetH, bpr)
+    }
+
+    private static func computeGutterMask(
+        raw: [UInt8],
+        W: Int,
+        H: Int,
+        bpr: Int,
+        bpp: Int,
+        isDark: Bool
+    ) -> [Bool] {
+        var mask = [Bool](repeating: false, count: W * H)
+        for y in 0..<H {
+            let rowOffset = y * bpr
+            let targetOffset = y * W
+            for x in 0..<W {
+                let o = rowOffset + x * bpp
+                let r = Int(raw[o])
+                let g = Int(raw[o+1])
+                let b = Int(raw[o+2])
+                let gray = (77 * r + 150 * g + 29 * b) >> 8
+                mask[targetOffset + x] = isDark ? (gray < 40) : (gray > 240)
+            }
+        }
+        return mask
+    }
+
     // MARK: - XY-Cut Projection Splitting Method
 
     private static func detectPanelsXYCut(
@@ -32,43 +88,23 @@ public class PanelDetector {
         minAreaPct: Double = 0.015
     ) -> [CGRect] {
         
-        let W = cgImage.width
-        let H = cgImage.height
-        guard W > 4, H > 4 else {
-            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
-        }
-
-        let bpp = 4
-        let bpr = bpp * W
-        var raw = [UInt8](repeating: 0, count: H * bpr)
-        guard let ctx = CGContext(
-            data: &raw, width: W, height: H,
-            bitsPerComponent: 8, bytesPerRow: bpr,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
+        guard let bufferInfo = getDownscaledRawBuffer(from: cgImage) else {
             return [CGRect(x: 0, y: 0, width: 1, height: 1)]
         }
         
-        // Draw top-down into buffer
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: W, height: H))
+        let raw = bufferInfo.raw
+        let W = bufferInfo.width
+        let H = bufferInfo.height
+        let bpr = bufferInfo.bytesPerRow
+        let bpp = 4
 
         // Determine edge background color
         let bg = detectMedianEdgeColor(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp)
+        let gutterMask = computeGutterMask(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp, isDark: bg.isDark)
 
         func isGutter(_ x: Int, _ y: Int) -> Bool {
             guard x >= 0, x < W, y >= 0, y < H else { return true }
-            let o = y * bpr + x * bpp
-            let r = Double(raw[o])
-            let g = Double(raw[o+1])
-            let b = Double(raw[o+2])
-            
-            let gray = 0.299 * r + 0.587 * g + 0.114 * b
-            if bg.isDark {
-                return gray < 40.0
-            } else {
-                return gray > 240.0
-            }
+            return gutterMask[y * W + x]
         }
 
         // 1. Initial border cropping to find the page contents boundary
@@ -329,56 +365,28 @@ public class PanelDetector {
         return sortRects(cgRects, direction: direction)
     }
 
-    // MARK: - Contour-Based Segmentation Method (Original)
+    // MARK: - Contour-Based Segmentation Method
 
     private static func detectPanelsContour(
         in cgImage: CGImage,
         direction: ReadingDirection
     ) async -> [CGRect] {
-        let W = cgImage.width, H = cgImage.height
-        guard W > 4, H > 4 else {
+        guard let bufferInfo = getDownscaledRawBuffer(from: cgImage) else {
             return [CGRect(x: 0, y: 0, width: 1, height: 1)]
         }
-
-        let bpp = 4, bpr = bpp * W
-        var raw = [UInt8](repeating: 0, count: H * bpr)
-        guard let ctx = CGContext(data: &raw, width: W, height: H,
-                                   bitsPerComponent: 8, bytesPerRow: bpr,
-                                   space: CGColorSpaceCreateDeviceRGB(),
-                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return [CGRect(x: 0, y: 0, width: 1, height: 1)] }
         
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: W, height: H))
+        let raw = bufferInfo.raw
+        let W = bufferInfo.width
+        let H = bufferInfo.height
+        let bpr = bufferInfo.bytesPerRow
+        let bpp = 4
 
         let bg = detectMedianEdgeColor(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp)
+        let gutterMask = computeGutterMask(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp, isDark: bg.isDark)
 
-        func isGutter(_ x: Int, _ y: Int) -> Bool {
-            guard x >= 0, x < W, y >= 0, y < H else { return true }
-            let o = y * bpr + x * bpp
-            let r = Double(raw[o])
-            let g = Double(raw[o+1])
-            let b = Double(raw[o+2])
-            
-            let gray = 0.299 * r + 0.587 * g + 0.114 * b
-            if bg.isDark {
-                return gray < 40.0
-            } else {
-                return gray > 240.0
-            }
-        }
-
-        let scale = min(1.0, 1024.0 / Double(max(W, H)))
-        let mW = max(4, Int(Double(W) * scale))
-        let mH = max(4, Int(Double(H) * scale))
-
-        var mask = [Bool](repeating: false, count: mW * mH)
-        for my in 0..<mH {
-            for mx in 0..<mW {
-                let px = Int(Double(mx) / scale)
-                let py = Int(Double(my) / scale)
-                mask[my * mW + mx] = isGutter(px, py)
-            }
-        }
+        let mW = W
+        let mH = H
+        var mask = gutterMask
 
         var dilatedMask = mask
         for my in 1..<(mH - 1) {

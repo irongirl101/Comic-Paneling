@@ -3,7 +3,7 @@ import ZIPFoundation
 import CoreGraphics
 import AppKit
 
-public class ComicImporter {
+public final class ComicImporter: Sendable {
     
     public static let shared = ComicImporter()
     
@@ -61,31 +61,79 @@ public class ComicImporter {
         
         imageURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
         
-        var pages: [ComicPage] = []
-        for (index, imgURL) in imageURLs.enumerated() {
-            let pageNum = index + 1
-            let relativePath = imgURL.path.replacingOccurrences(of: bookDir.path + "/", with: "")
+        var pages = [ComicPage?](repeating: nil, count: imageURLs.count)
+        let maxConcurrentTasks = max(2, ProcessInfo.processInfo.activeProcessorCount)
+        
+        await withTaskGroup(of: (Int, ComicPage).self) { group in
+            var index = 0
             
-            var panels: [ComicPanel] = []
-            if let cgImage = createCGImage(from: imgURL) {
-                let rects = await PanelDetector.detectPanels(in: cgImage, direction: direction)
-                panels = rects.enumerated().map { (panelIdx, rect) in
-                    ComicPanel(rect: rect, order: panelIdx)
+            // Start the first batch of tasks
+            while index < min(maxConcurrentTasks, imageURLs.count) {
+                let currentIdx = index
+                let imgURL = imageURLs[currentIdx]
+                let pageNum = currentIdx + 1
+                let relativePath = imgURL.path.replacingOccurrences(of: bookDir.path + "/", with: "")
+                
+                group.addTask {
+                    let cgImage = self.createCGImage(from: imgURL)
+                    var panels: [ComicPanel] = []
+                    if let cgImage = cgImage {
+                        let rects = await PanelDetector.detectPanels(in: cgImage, direction: direction)
+                        panels = rects.enumerated().map { (panelIdx, rect) in
+                            ComicPanel(rect: rect, order: panelIdx)
+                        }
+                    } else {
+                        panels = [ComicPanel(rect: CGRect(x: 0, y: 0, width: 1, height: 1), order: 0)]
+                    }
+                    
+                    let page = ComicPage(
+                        pageNumber: pageNum,
+                        imagePath: relativePath,
+                        panels: panels,
+                        isCustomImported: true
+                    )
+                    return (currentIdx, page)
                 }
-            } else {
-                panels = [ComicPanel(rect: CGRect(x: 0, y: 0, width: 1, height: 1), order: 0)]
+                index += 1
             }
             
-            let page = ComicPage(
-                pageNumber: pageNum,
-                imagePath: relativePath,
-                panels: panels,
-                isCustomImported: true
-            )
-            pages.append(page)
+            // Collect completed tasks and submit new ones
+            for await (idx, page) in group {
+                pages[idx] = page
+                
+                if index < imageURLs.count {
+                    let currentIdx = index
+                    let imgURL = imageURLs[currentIdx]
+                    let pageNum = currentIdx + 1
+                    let relativePath = imgURL.path.replacingOccurrences(of: bookDir.path + "/", with: "")
+                    
+                    group.addTask {
+                        let cgImage = self.createCGImage(from: imgURL)
+                        var panels: [ComicPanel] = []
+                        if let cgImage = cgImage {
+                            let rects = await PanelDetector.detectPanels(in: cgImage, direction: direction)
+                            panels = rects.enumerated().map { (panelIdx, rect) in
+                                ComicPanel(rect: rect, order: panelIdx)
+                            }
+                        } else {
+                            panels = [ComicPanel(rect: CGRect(x: 0, y: 0, width: 1, height: 1), order: 0)]
+                        }
+                        
+                        let page = ComicPage(
+                            pageNumber: pageNum,
+                            imagePath: relativePath,
+                            panels: panels,
+                            isCustomImported: true
+                        )
+                        return (currentIdx, page)
+                    }
+                    index += 1
+                }
+            }
         }
         
-        let coverImgPath = pages.first?.imagePath ?? ""
+        let finalPages = pages.compactMap { $0 }
+        let coverImgPath = finalPages.first?.imagePath ?? ""
         
         let book = ComicBook(
             id: bookId,
@@ -93,7 +141,7 @@ public class ComicImporter {
             author: author,
             coverImagePath: coverImgPath,
             readingDirection: direction,
-            pages: pages,
+            pages: finalPages,
             isCustomImported: true
         )
         
