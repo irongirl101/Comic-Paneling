@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public struct LibraryGridView: View {
+    @Binding var activeBook: ComicBook?
+    
     @StateObject private var progressManager = ReadingProgressManager.shared
     
     @State private var sampleComics: [ComicBook] = []
@@ -24,7 +26,9 @@ public struct LibraryGridView: View {
         GridItem(.adaptive(minimum: 140, maximum: 170), spacing: 20)
     ]
     
-    public init() {}
+    public init(activeBook: Binding<ComicBook?>) {
+        self._activeBook = activeBook
+    }
     
     public var body: some View {
         ZStack {
@@ -70,7 +74,11 @@ public struct LibraryGridView: View {
                             LazyVGrid(columns: columns, spacing: 20) {
                                 ForEach(sampleComics) { book in
                                     let progress = progressManager.getProgress(for: book.id)
-                                    NavigationLink(destination: DesktopReaderView(book: book)) {
+                                    Button(action: {
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            activeBook = book
+                                        }
+                                    }) {
                                         ComicCard(book: book, progress: progress)
                                     }
                                     .buttonStyle(.plain)
@@ -114,7 +122,11 @@ public struct LibraryGridView: View {
                             LazyVGrid(columns: columns, spacing: 20) {
                                 ForEach(importedComics) { book in
                                     let progress = progressManager.getProgress(for: book.id)
-                                    NavigationLink(destination: DesktopReaderView(book: book)) {
+                                    Button(action: {
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            activeBook = book
+                                        }
+                                    }) {
                                         ComicCard(book: book, progress: progress)
                                     }
                                     .buttonStyle(.plain)

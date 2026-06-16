@@ -6,7 +6,7 @@ public enum DesktopViewMode: String, Codable, CaseIterable {
 }
 
 public struct DesktopReaderView: View {
-    @Environment(\.dismiss) var dismiss
+    public var onDismiss: () -> Void
     
     @State public var book: ComicBook
     @State private var currentPageIndex: Int = 0
@@ -22,8 +22,9 @@ public struct DesktopReaderView: View {
     @State private var zoomFactor: CGFloat = 1.0
     @GestureState private var gestureZoom: CGFloat = 1.0
     
-    public init(book: ComicBook) {
+    public init(book: ComicBook, onDismiss: @escaping () -> Void) {
         self._book = State(initialValue: book)
+        self.onDismiss = onDismiss
     }
     
     public var body: some View {
@@ -37,8 +38,13 @@ public struct DesktopReaderView: View {
                 zoomFactor = min(3.0, max(0.5, zoomFactor * value.magnification))
             }
         
-        ZStack {
-            Color.black
+        GeometryReader { windowGeo in
+            let safeAreaTop = windowGeo.safeAreaInsets.top
+            let safeAreaBottom = windowGeo.safeAreaInsets.bottom
+            
+            ZStack {
+                Color.black
+                .ignoresSafeArea()
             
             if !book.pages.isEmpty {
                 let currentPage = book.pages[currentPageIndex]
@@ -96,6 +102,7 @@ public struct DesktopReaderView: View {
                     }
                 }
                 .gesture(magnifyGesture)
+                .ignoresSafeArea()
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "magazine")
@@ -110,102 +117,131 @@ public struct DesktopReaderView: View {
             if showControls && !book.pages.isEmpty {
                 VStack(spacing: 0) {
                     // Top Bar
-                    HStack {
-                        Button(action: { dismiss() }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 14, weight: .bold))
-                                Text("Library")
-                                    .font(.system(size: 13, weight: .medium))
-                            }
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.1)))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Exit reader and return to shelf (Esc)")
-                        
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(book.title)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                            Text(book.author)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.gray)
-                        }
-                        .padding(.leading, 8)
-                        
+                    VStack(spacing: 0) {
                         Spacer()
+                            .frame(height: safeAreaTop)
                         
-                        Picker("View Mode", selection: $viewMode) {
-                            ForEach(DesktopViewMode.allCases, id: \.self) { mode in
-                                Text(mode.rawValue).tag(mode)
+                        GeometryReader { topBarGeo in
+                        let w = topBarGeo.size.width
+                        let maxSideWidth = max(145, (w - 200) / 2 - 16)
+                        
+                        ZStack {
+                            // Center View Mode Picker (guaranteed centered)
+                            Picker("View Mode", selection: $viewMode) {
+                                ForEach(DesktopViewMode.allCases, id: \.self) { mode in
+                                    Text(mode.rawValue).tag(mode)
+                                }
                             }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 200)
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 8) {
-                            // Zoom Controls
-                            HStack(spacing: 4) {
-                                Button(action: {
-                                    withAnimation(.easeInOut(duration: 0.15)) {
-                                        zoomFactor = max(0.5, zoomFactor - 0.15)
-                                    }
-                                }) {
-                                    Image(systemName: "minus.magnifyingglass")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .frame(width: 30, height: 30)
-                                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.12)))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Zoom Out (-)")
-                                
-                                Button(action: {
-                                    withAnimation(.easeInOut(duration: 0.15)) {
-                                        zoomFactor = 1.0
-                                    }
-                                }) {
-                                    Text("\(Int(zoomFactor * 100))%")
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                        .foregroundColor(.cyan)
-                                        .frame(width: 50, height: 30)
-                                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.12)))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Reset Zoom (0)")
-                                
-                                Button(action: {
-                                    withAnimation(.easeInOut(duration: 0.15)) {
-                                        zoomFactor = min(3.0, zoomFactor + 0.15)
-                                    }
-                                }) {
-                                    Image(systemName: "plus.magnifyingglass")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .frame(width: 30, height: 30)
-                                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.12)))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Zoom In (+)")
-                            }
-                            .padding(.trailing, 8)
+                            .pickerStyle(.segmented)
+                            .frame(width: 180)
                             
-                            Button(action: { showEditor = true }) {
-                                Label("Edit Page", systemImage: "rectangle.and.pencil.and.ellipsis")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.12)))
+                            HStack(spacing: 0) {
+                                // Left side
+                                HStack(spacing: 6) {
+                                    Button(action: { onDismiss() }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "chevron.left")
+                                                .font(.system(size: 13, weight: .bold))
+                                            Text("Library")
+                                                .font(.system(size: 12, weight: .medium))
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.1)))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Exit reader (Esc)")
+                                    
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text(book.title)
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        Text(book.author)
+                                            .font(.system(size: 9, weight: .medium))
+                                            .foregroundColor(.gray)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                .frame(maxWidth: maxSideWidth, alignment: .leading)
+                                
+                                Spacer()
+                                
+                                // Right side
+                                HStack(spacing: 6) {
+                                    // Zoom Controls
+                                    HStack(spacing: 0) {
+                                        Button(action: {
+                                            withAnimation(.easeInOut(duration: 0.15)) {
+                                                zoomFactor = max(0.5, zoomFactor - 0.15)
+                                            }
+                                        }) {
+                                            Image(systemName: "minus.magnifyingglass")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.white)
+                                                .frame(width: 28, height: 28)
+                                                .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Zoom Out (-)")
+                                        
+                                        Divider()
+                                            .frame(height: 14)
+                                            .background(Color.white.opacity(0.15))
+                                        
+                                        Button(action: {
+                                            withAnimation(.easeInOut(duration: 0.15)) {
+                                                zoomFactor = 1.0
+                                            }
+                                        }) {
+                                            Text("\(Int(zoomFactor * 100))%")
+                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                .foregroundColor(.cyan)
+                                                .frame(width: 44, height: 28)
+                                                .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Reset Zoom (0)")
+                                        
+                                        Divider()
+                                            .frame(height: 14)
+                                            .background(Color.white.opacity(0.15))
+                                        
+                                        Button(action: {
+                                            withAnimation(.easeInOut(duration: 0.15)) {
+                                                zoomFactor = min(3.0, zoomFactor + 0.15)
+                                            }
+                                        }) {
+                                            Image(systemName: "plus.magnifyingglass")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.white)
+                                                .frame(width: 28, height: 28)
+                                                .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Zoom In (+)")
+                                    }
+                                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.1)))
+                                    
+                                    Button(action: { showEditor = true }) {
+                                        Image(systemName: "rectangle.and.pencil.and.ellipsis")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.white)
+                                            .frame(width: 28, height: 28)
+                                            .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.1)))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Edit Page Panels")
+                                }
+                                .frame(maxWidth: maxSideWidth, alignment: .trailing)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                     }
-                    .padding()
+                    .frame(height: 44)
+                    }
                     .background(Color.black.opacity(0.85))
                     .transition(.move(edge: .top))
                     
@@ -220,45 +256,51 @@ public struct DesktopReaderView: View {
                     }
                     
                     // Bottom Navigation
-                    VStack(spacing: 10) {
-                        HStack {
-                            Text("Page \(currentPageIndex + 1) of \(book.pages.count)")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.white)
+                    VStack(spacing: 0) {
+                        VStack(spacing: 10) {
+                            HStack {
+                                Text("Page \(currentPageIndex + 1) of \(book.pages.count)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.white)
+                                
+                                Spacer()
+                                
+                                let pagePanels = book.pages[currentPageIndex].panels.count
+                                Text("Panel \(currentPanelIndex + 1) of \(pagePanels)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.cyan)
+                            }
                             
-                            Spacer()
-                            
-                            let pagePanels = book.pages[currentPageIndex].panels.count
-                            Text("Panel \(currentPanelIndex + 1) of \(pagePanels)")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.cyan)
-                        }
-                        
-                        if book.pages.count > 1 {
-                            Slider(
-                                value: Binding(
-                                    get: { Double(currentPageIndex) },
-                                    set: { newValue in
-                                        let idx = Int(newValue)
-                                        if idx >= 0 && idx < book.pages.count {
-                                            currentPageIndex = idx
-                                            currentPanelIndex = 0
-                                            zoomFactor = 1.0
-                                            saveReadingProgress()
+                            if book.pages.count > 1 {
+                                Slider(
+                                    value: Binding(
+                                        get: { Double(currentPageIndex) },
+                                        set: { newValue in
+                                            let idx = Int(newValue)
+                                            if idx >= 0 && idx < book.pages.count {
+                                                currentPageIndex = idx
+                                                currentPanelIndex = 0
+                                                saveReadingProgress()
+                                            }
                                         }
-                                    }
-                                ),
-                                in: 0...Double(book.pages.count - 1),
-                                step: 1.0
-                            )
-                            .accentColor(.cyan)
+                                    ),
+                                    in: 0...Double(book.pages.count - 1),
+                                    step: 1.0
+                                )
+                                .accentColor(.cyan)
+                            }
                         }
+                        .padding()
+                        
+                        Spacer()
+                            .frame(height: safeAreaBottom)
                     }
-                    .padding()
                     .background(Color.black.opacity(0.85))
                     .transition(.move(edge: .bottom))
                 }
+                .ignoresSafeArea()
             }
+        }
         }
         .ignoresSafeArea()
         .toolbar(.hidden)
@@ -285,7 +327,7 @@ public struct DesktopReaderView: View {
                 return .handled
                 
             case .escape:
-                dismiss()
+                onDismiss()
                 return .handled
                 
             default:
@@ -359,7 +401,6 @@ public struct DesktopReaderView: View {
     }
     
     private func goToNextPanel() {
-        zoomFactor = 1.0
         let currentPage = book.pages[currentPageIndex]
         if currentPanelIndex < currentPage.panels.count - 1 {
             withAnimation {
@@ -383,7 +424,6 @@ public struct DesktopReaderView: View {
     }
     
     private func goToPreviousPanel() {
-        zoomFactor = 1.0
         if currentPanelIndex > 0 {
             withAnimation {
                 currentPanelIndex -= 1

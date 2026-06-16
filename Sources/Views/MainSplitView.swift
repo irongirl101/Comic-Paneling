@@ -16,38 +16,51 @@ public enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
 
 public struct MainSplitView: View {
     @State private var selectedItem: SidebarItem? = .library
+    @State private var activeBook: ComicBook? = nil
     
     public init() {}
     
     public var body: some View {
-        NavigationSplitView {
-            List(SidebarItem.allCases, selection: $selectedItem) { item in
-                NavigationLink(value: item) {
-                    Label(item.rawValue, systemImage: item.icon)
-                        .font(.system(size: 13, weight: .medium))
+        ZStack {
+            NavigationSplitView {
+                List(SidebarItem.allCases, selection: $selectedItem) { item in
+                    NavigationLink(value: item) {
+                        Label(item.rawValue, systemImage: item.icon)
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                }
+                .listStyle(.sidebar)
+                .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 240)
+                
+                // Branding watermark at sidebar bottom
+                VStack {
+                    Spacer()
+                    HStack {
+                        Image(systemName: "circle.circle.fill")
+                            .foregroundColor(.cyan)
+                        Text("AGY Engine")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.bottom, 12)
+                }
+            } detail: {
+                switch selectedItem {
+                case .library, .none:
+                    LibraryGridView(activeBook: $activeBook)
+                case .preferences:
+                    SettingsView()
                 }
             }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 240)
             
-            // Branding watermark at sidebar bottom
-            VStack {
-                Spacer()
-                HStack {
-                    Image(systemName: "circle.circle.fill")
-                        .foregroundColor(.cyan)
-                    Text("AGY Engine")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.gray)
-                }
-                .padding(.bottom, 12)
-            }
-        } detail: {
-            switch selectedItem {
-            case .library, .none:
-                LibraryGridView()
-            case .preferences:
-                SettingsView()
+            if let book = activeBook {
+                DesktopReaderView(book: book, onDismiss: {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        activeBook = nil
+                    }
+                })
+                .transition(.opacity)
+                .zIndex(1)
             }
         }
     }
