@@ -21,38 +21,7 @@ public struct MainSplitView: View {
     public init() {}
     
     public var body: some View {
-        ZStack {
-            NavigationSplitView {
-                List(SidebarItem.allCases, selection: $selectedItem) { item in
-                    NavigationLink(value: item) {
-                        Label(item.rawValue, systemImage: item.icon)
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                }
-                .listStyle(.sidebar)
-                .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 240)
-                
-                // Branding watermark at sidebar bottom
-                VStack {
-                    Spacer()
-                    HStack {
-                        Image(systemName: "circle.circle.fill")
-                            .foregroundColor(.cyan)
-                        Text("AGY Engine")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.gray)
-                    }
-                    .padding(.bottom, 12)
-                }
-            } detail: {
-                switch selectedItem {
-                case .library, .none:
-                    LibraryGridView(activeBook: $activeBook)
-                case .preferences:
-                    SettingsView()
-                }
-            }
-            
+        Group {
             if let book = activeBook {
                 DesktopReaderView(book: book, onDismiss: {
                     withAnimation(.easeInOut(duration: 0.25)) {
@@ -60,7 +29,38 @@ public struct MainSplitView: View {
                     }
                 })
                 .transition(.opacity)
-                .zIndex(1)
+            } else {
+                NavigationSplitView {
+                    List(SidebarItem.allCases, selection: $selectedItem) { item in
+                        NavigationLink(value: item) {
+                            Label(item.rawValue, systemImage: item.icon)
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                    }
+                    .listStyle(.sidebar)
+                    .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 240)
+                    
+                    // Branding watermark at sidebar bottom
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Image(systemName: "circle.circle.fill")
+                                .foregroundColor(.cyan)
+                            Text("AGY Engine")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.bottom, 12)
+                    }
+                } detail: {
+                    switch selectedItem {
+                    case .library, .none:
+                        LibraryGridView(activeBook: $activeBook)
+                    case .preferences:
+                        SettingsView()
+                    }
+                }
+                .transition(.opacity)
             }
         }
     }
@@ -70,7 +70,7 @@ struct SettingsView: View {
     @StateObject private var progressManager = ReadingProgressManager.shared
     
     @State private var defaultViewMode: DesktopViewMode = .guided
-    @State private var autoSpotlightOpacity: Double = 0.65
+    @State private var autoSpotlightOpacity: Double = 0.80
     @State private var showConfirmReset = false
     @State private var showConfirmClearImports = false
     

@@ -285,7 +285,7 @@ public struct LibraryGridView: View {
     }
     
     private func loadAllComics() {
-        self.sampleComics = SampleComicBuilder.buildSampleComics()
+        self.sampleComics = []
         self.importedComics = ComicImporter.shared.loadImportedComics()
         progressManager.loadProgress()
     }

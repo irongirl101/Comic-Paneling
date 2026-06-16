@@ -76,14 +76,10 @@ public struct SpotlightBorder: View {
     public var body: some View {
         PanelPolygonShape(points: panelPoints)
             .stroke(
-                LinearGradient(
-                    colors: [Color.cyan, Color.purple, Color.blue],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: max(1.0, (2.0 + CGFloat(glowPulse * 0.5)) / renderScale)
+                Color.white.opacity(0.8),
+                lineWidth: max(1.0, (1.5 + CGFloat(glowPulse * 0.5)) / renderScale)
             )
-            .shadow(color: Color.cyan.opacity(0.4 + glowPulse * 0.3), radius: 6.0 + CGFloat(glowPulse * 4.0))
+            .shadow(color: Color.white.opacity(0.25 + glowPulse * 0.15), radius: 5.0 + CGFloat(glowPulse * 3.0))
             .frame(width: fitImageSize.width, height: fitImageSize.height)
             .scaleEffect(renderScale)
             .offset(x: renderOffsetX, y: renderOffsetY)
@@ -165,8 +161,10 @@ public struct DesktopGuidedView: View {
                     // compositingGroup isolates blending; destinationOut erases the
                     // panel-shaped area so the image below shows through unobscured.
                     ZStack {
-                        Color.black.opacity(isAdjusting ? 0.30 : 0.65)
-
+                        let savedOpacity = UserDefaults.standard.double(forKey: "spotlight_opacity")
+                        let currentOpacity = savedOpacity > 0 ? savedOpacity : 0.80
+                        Color.black.opacity(isAdjusting ? 0.30 : currentOpacity)
+ 
                         PanelPolygonShape(points: panelPoints)
                             .frame(width: fitImageSize.width, height: fitImageSize.height)
                             .scaleEffect(renderScale)

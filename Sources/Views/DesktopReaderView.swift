@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 public enum DesktopViewMode: String, Codable, CaseIterable {
     case guided = "Guided Spotlight"
@@ -9,6 +10,7 @@ public struct DesktopReaderView: View {
     public var onDismiss: () -> Void
     
     @State public var book: ComicBook
+    @State private var isFullscreen: Bool = false
     @State private var currentPageIndex: Int = 0
     @State private var currentPanelIndex: Int = 0
     @State private var viewMode: DesktopViewMode = .guided
@@ -39,7 +41,7 @@ public struct DesktopReaderView: View {
             }
         
         GeometryReader { windowGeo in
-            let safeAreaTop = windowGeo.safeAreaInsets.top
+            let safeAreaTop = isFullscreen ? windowGeo.safeAreaInsets.top : 28
             let safeAreaBottom = windowGeo.safeAreaInsets.bottom
             
             ZStack {
@@ -138,6 +140,11 @@ public struct DesktopReaderView: View {
                             HStack(spacing: 0) {
                                 // Left side
                                 HStack(spacing: 6) {
+                                    if !isFullscreen {
+                                        Spacer()
+                                            .frame(width: 75)
+                                    }
+                                    
                                     Button(action: { onDismiss() }) {
                                         HStack(spacing: 4) {
                                             Image(systemName: "chevron.left")
@@ -365,6 +372,11 @@ public struct DesktopReaderView: View {
         .onAppear {
             isReaderFocused = true
             
+            // Check initial fullscreen state
+            if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+                isFullscreen = window.styleMask.contains(.fullScreen)
+            }
+            
             // Restore progress
             let progress = ReadingProgressManager.shared.getProgress(for: book.id)
             if progress.currentPageIndex < book.pages.count {
@@ -396,6 +408,16 @@ public struct DesktopReaderView: View {
                         isReaderFocused = true
                     }
                 )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                isFullscreen = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                isFullscreen = false
             }
         }
     }
