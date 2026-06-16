@@ -19,12 +19,23 @@ public struct DesktopReaderView: View {
     
     @FocusState private var isReaderFocused: Bool
     
+    @State private var zoomFactor: CGFloat = 1.0
+    @GestureState private var gestureZoom: CGFloat = 1.0
+    
     public init(book: ComicBook) {
         self._book = State(initialValue: book)
     }
     
     public var body: some View {
         let isRTL = book.readingDirection == .rightToLeft
+        
+        let magnifyGesture = MagnifyGesture()
+            .updating($gestureZoom) { value, state, _ in
+                state = value.magnification
+            }
+            .onEnded { value in
+                zoomFactor = min(3.0, max(0.5, zoomFactor * value.magnification))
+            }
         
         ZStack {
             Color.black
@@ -38,6 +49,7 @@ public struct DesktopReaderView: View {
                             page: $book.pages[currentPageIndex],
                             activePanelIndex: currentPanelIndex,
                             isAdjusting: isAdjustingPanel,
+                            zoomFactor: zoomFactor * gestureZoom,
                             onAdjustEnded: {
                                 if book.isCustomImported {
                                     let bookDir = ComicImporter.comicsDirectory.appendingPathComponent(book.id.uuidString)
@@ -47,7 +59,7 @@ public struct DesktopReaderView: View {
                             }
                         )
                     } else {
-                        DesktopFocusView(page: currentPage, activePanelIndex: currentPanelIndex)
+                        DesktopFocusView(page: currentPage, activePanelIndex: currentPanelIndex, zoomFactor: zoomFactor * gestureZoom)
                     }
                     
                     // Mouse Click Tap Zones
@@ -83,6 +95,7 @@ public struct DesktopReaderView: View {
                             }
                     }
                 }
+                .gesture(magnifyGesture)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "magazine")
@@ -135,6 +148,52 @@ public struct DesktopReaderView: View {
                         Spacer()
                         
                         HStack(spacing: 8) {
+                            // Zoom Controls
+                            HStack(spacing: 4) {
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        zoomFactor = max(0.5, zoomFactor - 0.15)
+                                    }
+                                }) {
+                                    Image(systemName: "minus.magnifyingglass")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 30, height: 30)
+                                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.12)))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Zoom Out (-)")
+                                
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        zoomFactor = 1.0
+                                    }
+                                }) {
+                                    Text("\(Int(zoomFactor * 100))%")
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.cyan)
+                                        .frame(width: 50, height: 30)
+                                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.12)))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Reset Zoom (0)")
+                                
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        zoomFactor = min(3.0, zoomFactor + 0.15)
+                                    }
+                                }) {
+                                    Image(systemName: "plus.magnifyingglass")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 30, height: 30)
+                                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.12)))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Zoom In (+)")
+                            }
+                            .padding(.trailing, 8)
+                            
                             Button(action: { showEditor = true }) {
                                 Label("Edit Page", systemImage: "rectangle.and.pencil.and.ellipsis")
                                     .font(.system(size: 13, weight: .medium))
@@ -184,6 +243,7 @@ public struct DesktopReaderView: View {
                                         if idx >= 0 && idx < book.pages.count {
                                             currentPageIndex = idx
                                             currentPanelIndex = 0
+                                            zoomFactor = 1.0
                                             saveReadingProgress()
                                         }
                                     }
@@ -229,17 +289,36 @@ public struct DesktopReaderView: View {
                 return .handled
                 
             default:
-                if press.characters == " " {
-                    goToNextPanel()
-                    return .handled
-                }
-                // Handle backspace/delete to go back
-                if press.characters == "\u{7F}" || press.characters == "\u{08}" {
-                    goToPreviousPanel()
-                    return .handled
-                }
-                return .ignored
-            }
+                                if press.characters == " " {
+                                    goToNextPanel()
+                                    return .handled
+                                }
+                                // Handle backspace/delete to go back
+                                if press.characters == "\u{7F}" || press.characters == "\u{08}" {
+                                    goToPreviousPanel()
+                                    return .handled
+                                }
+                                // Zoom keyboard shortcuts
+                                if press.characters == "=" || press.characters == "+" {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        zoomFactor = min(3.0, zoomFactor + 0.15)
+                                    }
+                                    return .handled
+                                }
+                                if press.characters == "-" {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        zoomFactor = max(0.5, zoomFactor - 0.15)
+                                    }
+                                    return .handled
+                                }
+                                if press.characters == "0" {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        zoomFactor = 1.0
+                                    }
+                                    return .handled
+                                }
+                                return .ignored
+                            }
         }
         .onAppear {
             isReaderFocused = true
@@ -280,6 +359,7 @@ public struct DesktopReaderView: View {
     }
     
     private func goToNextPanel() {
+        zoomFactor = 1.0
         let currentPage = book.pages[currentPageIndex]
         if currentPanelIndex < currentPage.panels.count - 1 {
             withAnimation {
@@ -303,6 +383,7 @@ public struct DesktopReaderView: View {
     }
     
     private func goToPreviousPanel() {
+        zoomFactor = 1.0
         if currentPanelIndex > 0 {
             withAnimation {
                 currentPanelIndex -= 1

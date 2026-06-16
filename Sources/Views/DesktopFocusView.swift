@@ -3,10 +3,12 @@ import SwiftUI
 public struct DesktopFocusView: View {
     public var page: ComicPage
     public var activePanelIndex: Int
+    public var zoomFactor: CGFloat
     
-    public init(page: ComicPage, activePanelIndex: Int) {
+    public init(page: ComicPage, activePanelIndex: Int, zoomFactor: CGFloat = 1.0) {
         self.page = page
         self.activePanelIndex = activePanelIndex
+        self.zoomFactor = zoomFactor
     }
     
     public var body: some View {
@@ -25,7 +27,7 @@ public struct DesktopFocusView: View {
             let targetScaleX = containerSize.width / max(1, panelWidthOnScreen)
             let targetScaleY = containerSize.height / max(1, panelHeightOnScreen)
             
-            let targetScale = min(4.5, max(1.0, min(targetScaleX, targetScaleY)))
+            let targetScale = min(4.5, max(1.0, min(targetScaleX, targetScaleY))) * zoomFactor
             
             let dx = (panelRect.midX - 0.5) * fitImageSize.width
             let dy = (panelRect.midY - 0.5) * fitImageSize.height

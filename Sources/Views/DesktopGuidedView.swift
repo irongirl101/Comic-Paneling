@@ -100,6 +100,7 @@ public struct DesktopGuidedView: View {
     @Binding public var page: ComicPage
     public var activePanelIndex: Int
     public var isAdjusting: Bool
+    public var zoomFactor: CGFloat
     public var onAdjustEnded: (() -> Void)? = nil
 
     @State private var dragStartPoints: [CGPoint]? = nil
@@ -107,10 +108,11 @@ public struct DesktopGuidedView: View {
     @State private var dragStartOffsetX: CGFloat? = nil
     @State private var dragStartOffsetY: CGFloat? = nil
 
-    public init(page: Binding<ComicPage>, activePanelIndex: Int, isAdjusting: Bool, onAdjustEnded: (() -> Void)? = nil) {
+    public init(page: Binding<ComicPage>, activePanelIndex: Int, isAdjusting: Bool, zoomFactor: CGFloat = 1.0, onAdjustEnded: (() -> Void)? = nil) {
         self._page = page
         self.activePanelIndex = activePanelIndex
         self.isAdjusting = isAdjusting
+        self.zoomFactor = zoomFactor
         self.onAdjustEnded = onAdjustEnded
     }
 
@@ -142,9 +144,9 @@ public struct DesktopGuidedView: View {
             let offsetY = -dy * targetScale
 
             // Freeze coordinates during drag to prevent cursor-drift loop
-            let renderScale   = dragStartScale   ?? targetScale
-            let renderOffsetX = dragStartOffsetX ?? offsetX
-            let renderOffsetY = dragStartOffsetY ?? offsetY
+            let renderScale   = (dragStartScale   ?? targetScale) * zoomFactor
+            let renderOffsetX = (dragStartOffsetX ?? offsetX) * zoomFactor
+            let renderOffsetY = (dragStartOffsetY ?? offsetY) * zoomFactor
 
             ZStack {
                 Color.black
@@ -223,8 +225,8 @@ public struct DesktopGuidedView: View {
                                             guard var startPoints = dragStartPoints,
                                                   let startScale  = dragStartScale else { return }
 
-                                            let dpX = gesture.translation.width  / (fitImageSize.width  * startScale)
-                                            let dpY = gesture.translation.height / (fitImageSize.height * startScale)
+                                            let dpX = gesture.translation.width  / (fitImageSize.width  * startScale * zoomFactor)
+                                            let dpY = gesture.translation.height / (fitImageSize.height * startScale * zoomFactor)
 
                                             let pt   = startPoints[idx]
                                             let newX = max(0.0, min(1.0, pt.x + dpX))
