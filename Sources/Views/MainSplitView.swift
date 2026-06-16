@@ -43,11 +43,20 @@ public struct MainSplitView: View {
                     // Branding watermark at sidebar bottom
                     VStack {
                         Spacer()
-                        HStack {
-                            Image(systemName: "circle.circle.fill")
-                                .foregroundColor(.cyan)
-                            Text("AGY Engine")
-                                .font(.system(size: 10, weight: .bold))
+                        HStack(spacing: 6) {
+                            if let logoURL = Bundle.module.url(forResource: "Panels", withExtension: "png"),
+                               let nsImage = NSImage(contentsOf: logoURL) {
+                                Image(nsImage: nsImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 16, height: 16)
+                                    .cornerRadius(4)
+                            } else {
+                                Image(systemName: "book.closed.fill")
+                                    .foregroundColor(.cyan)
+                            }
+                            Text("Panels")
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.gray)
                         }
                         .padding(.bottom, 12)

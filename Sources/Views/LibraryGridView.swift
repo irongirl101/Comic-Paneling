@@ -39,7 +39,16 @@ public struct LibraryGridView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     // Title Bar
-                    HStack {
+                    HStack(alignment: .center, spacing: 12) {
+                        if let logoURL = Bundle.module.url(forResource: "Panels", withExtension: "png"),
+                           let nsImage = NSImage(contentsOf: logoURL) {
+                            Image(nsImage: nsImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 36, height: 36)
+                                .cornerRadius(8)
+                        }
+                        
                         VStack(alignment: .leading, spacing: 4) {
                             Text("All Comics")
                                 .font(.system(size: 28, weight: .bold))

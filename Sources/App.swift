@@ -6,6 +6,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Force the terminal launched executable to register as a standard GUI window in macOS
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        
+        // Set application icon from resources
+        if let iconURL = Bundle.module.url(forResource: "Panels", withExtension: "png"),
+           let iconImage = NSImage(contentsOf: iconURL) {
+            NSApp.applicationIconImage = iconImage
+        }
     }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
