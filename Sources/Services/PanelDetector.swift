@@ -1,20 +1,340 @@
 import Foundation
 import CoreGraphics
-
-/// PanelDetector: Detects comic panels by segmenting a page along its white gutter regions.
-///
-/// Algorithm:
-/// 1. Detect the gutter (background) color from outer page edges.
-/// 2. Build a binary gutter mask (every pixel is gutter or artwork).
-/// 3. Flood-fill connected artwork regions — each region is a panel.
-/// 4. Return the bounding box of each region larger than a minimum size.
-@preconcurrency import Vision
+import Vision
 
 public class PanelDetector {
 
-    public static func detectPanels(in cgImage: CGImage, direction: ReadingDirection = .leftToRight) async -> [CGRect] {
+    public enum DetectionMode {
+        case contour
+        case xycut
+    }
 
-        // ── 1. Rasterize image into RGBA bitmap ───────────────────────────────
+    /// Public interface for panel detection. Defaults to the robust xycut mode.
+    public static func detectPanels(
+        in cgImage: CGImage,
+        direction: ReadingDirection = .leftToRight,
+        mode: DetectionMode = .xycut
+    ) async -> [CGRect] {
+        switch mode {
+        case .contour:
+            return await detectPanelsContour(in: cgImage, direction: direction)
+        case .xycut:
+            return detectPanelsXYCut(in: cgImage, direction: direction)
+        }
+    }
+
+    // MARK: - XY-Cut Projection Splitting Method
+
+    private static func detectPanelsXYCut(
+        in cgImage: CGImage,
+        direction: ReadingDirection,
+        xycutThreshold: Double = 0.84, // Equivalent to 215/255
+        minAreaPct: Double = 0.015
+    ) -> [CGRect] {
+        
+        let W = cgImage.width
+        let H = cgImage.height
+        guard W > 4, H > 4 else {
+            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        }
+
+        let bpp = 4
+        let bpr = bpp * W
+        var raw = [UInt8](repeating: 0, count: H * bpr)
+        guard let ctx = CGContext(
+            data: &raw, width: W, height: H,
+            bitsPerComponent: 8, bytesPerRow: bpr,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        }
+        
+        // Draw top-down into buffer
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: W, height: H))
+
+        // Determine edge background color
+        let bg = detectMedianEdgeColor(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp)
+
+        func isGutter(_ x: Int, _ y: Int) -> Bool {
+            guard x >= 0, x < W, y >= 0, y < H else { return true }
+            let o = y * bpr + x * bpp
+            let r = Double(raw[o])
+            let g = Double(raw[o+1])
+            let b = Double(raw[o+2])
+            
+            let gray = 0.299 * r + 0.587 * g + 0.114 * b
+            if bg.isDark {
+                return gray < 40.0
+            } else {
+                return gray > 240.0
+            }
+        }
+
+        // 1. Initial border cropping to find the page contents boundary
+        var yMin = 0, yMax = H - 1
+        var xMin = 0, xMax = W - 1
+        
+        // Find yMin
+        for y in 0..<H {
+            var rowSum = 0
+            for x in 0..<W {
+                if isGutter(x, y) { rowSum += 1 }
+            }
+            if Double(rowSum) / Double(W) < 0.99 {
+                yMin = y
+                break
+            }
+        }
+        
+        // Find yMax
+        for y in stride(from: H - 1, through: 0, by: -1) {
+            var rowSum = 0
+            for x in 0..<W {
+                if isGutter(x, y) { rowSum += 1 }
+            }
+            if Double(rowSum) / Double(W) < 0.99 {
+                yMax = y
+                break
+            }
+        }
+        
+        // Find xMin
+        for x in 0..<W {
+            var colSum = 0
+            for y in 0..<H {
+                if isGutter(x, y) { colSum += 1 }
+            }
+            if Double(colSum) / Double(H) < 0.99 {
+                xMin = x
+                break
+            }
+        }
+        
+        // Find xMax
+        for x in stride(from: W - 1, through: 0, by: -1) {
+            var colSum = 0
+            for y in 0..<H {
+                if isGutter(x, y) { colSum += 1 }
+            }
+            if Double(colSum) / Double(H) < 0.99 {
+                xMax = x
+                break
+            }
+        }
+        
+        guard xMax > xMin, yMax > yMin else {
+            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        }
+        
+        // 2. Recursive Split helper structures
+        struct SubRect {
+            var x1: Int
+            var y1: Int
+            var x2: Int
+            var y2: Int
+            
+            var width: Int { x2 - x1 }
+            var height: Int { y2 - y1 }
+        }
+        
+        func findSplits(in rect: SubRect, axis: Int) -> [(Int, Int)] {
+            if rect.height <= 10 || rect.width <= 10 { return [] }
+            
+            var splits: [(Int, Int)] = []
+            var inGutter = false
+            var startIdx = 0
+            
+            if axis == 0 { // Horizontal split check (rows)
+                for y in 0..<rect.height {
+                    let globalY = rect.y1 + y
+                    var gutterCount = 0
+                    for x in 0..<rect.width {
+                        let globalX = rect.x1 + x
+                        if isGutter(globalX, globalY) {
+                            gutterCount += 1
+                        }
+                    }
+                    let rowMean = Double(gutterCount) / Double(rect.width)
+                    let isGutterRow = rowMean > xycutThreshold
+                    
+                    if isGutterRow && !inGutter {
+                        inGutter = true
+                        startIdx = y
+                    } else if !isGutterRow && inGutter {
+                        inGutter = false
+                        let endIdx = y
+                        if endIdx - startIdx > 4 {
+                            splits.append((rect.y1 + startIdx, rect.y1 + endIdx))
+                        }
+                    }
+                }
+            } else { // Vertical split check (columns)
+                for x in 0..<rect.width {
+                    let globalX = rect.x1 + x
+                    var gutterCount = 0
+                    for y in 0..<rect.height {
+                        let globalY = rect.y1 + y
+                        if isGutter(globalX, globalY) {
+                            gutterCount += 1
+                        }
+                    }
+                    let colMean = Double(gutterCount) / Double(rect.height)
+                    let isGutterCol = colMean > xycutThreshold
+                    
+                    if isGutterCol && !inGutter {
+                        inGutter = true
+                        startIdx = x
+                    } else if !isGutterCol && inGutter {
+                        inGutter = false
+                        let endIdx = x
+                        if endIdx - startIdx > 4 {
+                            splits.append((rect.x1 + startIdx, rect.x1 + endIdx))
+                        }
+                    }
+                }
+            }
+            return splits
+        }
+        
+        func recursiveSplit(rect: SubRect) -> [SubRect] {
+            // A. Try Horizontal splits (split page into rows)
+            let hSplits = findSplits(in: rect, axis: 0).filter { 
+                $0.0 - rect.y1 > 20 && rect.y2 - $0.1 > 20 
+            }
+            
+            if !hSplits.isEmpty {
+                var yCoords = [rect.y1]
+                for split in hSplits {
+                    yCoords.append((split.0 + split.1) / 2)
+                }
+                yCoords.append(rect.y2)
+                
+                var results: [SubRect] = []
+                for i in 0..<(yCoords.count - 1) {
+                    let subRect = SubRect(x1: rect.x1, y1: yCoords[i], x2: rect.x2, y2: yCoords[i+1])
+                    results.append(contentsOf: recursiveSplit(rect: subRect))
+                }
+                return results
+            }
+            
+            // B. Try Vertical splits (split row into columns)
+            let vSplits = findSplits(in: rect, axis: 1).filter { 
+                $0.0 - rect.x1 > 20 && rect.x2 - $0.1 > 20 
+            }
+            
+            if !vSplits.isEmpty {
+                var xCoords = [rect.x1]
+                for split in vSplits {
+                    xCoords.append((split.0 + split.1) / 2)
+                }
+                xCoords.append(rect.x2)
+                
+                var results: [SubRect] = []
+                for i in 0..<(xCoords.count - 1) {
+                    let subRect = SubRect(x1: xCoords[i], y1: rect.y1, x2: xCoords[i+1], y2: rect.y2)
+                    results.append(contentsOf: recursiveSplit(rect: subRect))
+                }
+                return results
+            }
+            
+            // C. Base case: tighten margins to fit black border tightly
+            var tightenedX1 = rect.x1, tightenedY1 = rect.y1
+            var tightenedX2 = rect.x2, tightenedY2 = rect.y2
+            
+            var foundContent = false
+            outerLoop: for y in 0..<rect.height {
+                let globalY = rect.y1 + y
+                for x in 0..<rect.width {
+                    let globalX = rect.x1 + x
+                    if !isGutter(globalX, globalY) {
+                        tightenedY1 = globalY
+                        foundContent = true
+                        break outerLoop
+                    }
+                }
+            }
+            
+            if foundContent {
+                foundContent = false
+                outerLoop: for y in stride(from: rect.height - 1, through: 0, by: -1) {
+                    let globalY = rect.y1 + y
+                    for x in 0..<rect.width {
+                        let globalX = rect.x1 + x
+                        if !isGutter(globalX, globalY) {
+                            tightenedY2 = globalY
+                            foundContent = true
+                            break outerLoop
+                        }
+                    }
+                }
+                
+                foundContent = false
+                outerLoop: for x in 0..<rect.width {
+                    let globalX = rect.x1 + x
+                    for y in 0..<rect.height {
+                        let globalY = rect.y1 + y
+                        if !isGutter(globalX, globalY) {
+                            tightenedX1 = globalX
+                            foundContent = true
+                            break outerLoop
+                        }
+                    }
+                }
+                
+                foundContent = false
+                outerLoop: for x in stride(from: rect.width - 1, through: 0, by: -1) {
+                    let globalX = rect.x1 + x
+                    for y in 0..<rect.height {
+                        let globalY = rect.y1 + y
+                        if !isGutter(globalX, globalY) {
+                            tightenedX2 = globalX
+                            foundContent = true
+                            break outerLoop
+                        }
+                    }
+                }
+            }
+            
+            return [SubRect(x1: tightenedX1, y1: tightenedY1, x2: tightenedX2, y2: tightenedY2)]
+        }
+        
+        let initialRect = SubRect(x1: xMin, y1: yMin, x2: xMax, y2: yMax)
+        let splitRects = recursiveSplit(rect: initialRect)
+        
+        // Filter by area constraints
+        let totalArea = Double(W * H)
+        let minArea = totalArea * minAreaPct
+        
+        let filteredRects = splitRects.filter { rect in
+            let area = Double(rect.width * rect.height)
+            guard area >= minArea else { return false }
+            let aspect = Double(rect.width) / Double(rect.height)
+            return aspect >= 0.1 && aspect <= 10.0
+        }
+        
+        guard !filteredRects.isEmpty else {
+            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        }
+        
+        let cgRects = filteredRects.map { rect in
+            CGRect(
+                x: Double(rect.x1) / Double(W),
+                y: Double(rect.y1) / Double(H),
+                width: Double(rect.width) / Double(W),
+                height: Double(rect.height) / Double(H)
+            )
+        }
+        
+        return sortRects(cgRects, direction: direction)
+    }
+
+    // MARK: - Contour-Based Segmentation Method (Original)
+
+    private static func detectPanelsContour(
+        in cgImage: CGImage,
+        direction: ReadingDirection
+    ) async -> [CGRect] {
         let W = cgImage.width, H = cgImage.height
         guard W > 4, H > 4 else {
             return [CGRect(x: 0, y: 0, width: 1, height: 1)]
@@ -27,12 +347,9 @@ public class PanelDetector {
                                    space: CGColorSpaceCreateDeviceRGB(),
                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return [CGRect(x: 0, y: 0, width: 1, height: 1)] }
-        // Flip Y so buffer row 0 = visual top of image
-        ctx.translateBy(x: 0, y: CGFloat(H))
-        ctx.scaleBy(x: 1, y: -1)
+        
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: W, height: H))
 
-        // ── 2. Determine median edge background color and gutter test ─────────
         let bg = detectMedianEdgeColor(raw: raw, W: W, H: H, bpr: bpr, bpp: bpp)
 
         func isGutter(_ x: Int, _ y: Int) -> Bool {
@@ -42,26 +359,18 @@ public class PanelDetector {
             let g = Double(raw[o+1])
             let b = Double(raw[o+2])
             
+            let gray = 0.299 * r + 0.587 * g + 0.114 * b
             if bg.isDark {
-                // For dark background, the gutter is black/near-black
-                let tol = 50.0
-                return r < tol && g < tol && b < tol
+                return gray < 40.0
             } else {
-                // For light background, the gutter is white/near-white
-                let whiteTol = 45.0
-                return abs(r - bg.r) < whiteTol
-                    && abs(g - bg.g) < whiteTol
-                    && abs(b - bg.b) < whiteTol
+                return gray > 240.0
             }
         }
 
-        // ── 3. Build gutter mask (work at reduced resolution for speed) ───────
-        // We downsample to at most 1024 pixels on the long side to keep thin borders intact and processing fast.
         let scale = min(1.0, 1024.0 / Double(max(W, H)))
         let mW = max(4, Int(Double(W) * scale))
         let mH = max(4, Int(Double(H) * scale))
 
-        // mask[y*mW + x] = true → wall (gutter or border), false → empty/artwork
         var mask = [Bool](repeating: false, count: mW * mH)
         for my in 0..<mH {
             for mx in 0..<mW {
@@ -71,13 +380,10 @@ public class PanelDetector {
             }
         }
 
-        // ── 4. Morphological Dilation on borders ──────────────────────────────
-        // Expand the wall pixels slightly to seal any small scan gaps in outlines.
         var dilatedMask = mask
         for my in 1..<(mH - 1) {
             for mx in 1..<(mW - 1) {
                 if mask[my * mW + mx] { continue }
-                // 3x3 neighborhood check
                 let neighbors = [
                     (my-1)*mW + (mx-1), (my-1)*mW + mx, (my-1)*mW + (mx+1),
                     my*mW + (mx-1),                    my*mW + (mx+1),
@@ -93,7 +399,6 @@ public class PanelDetector {
         }
         mask = dilatedMask
 
-        // ── 5. Flood-fill connected artwork regions ──────────────────────────
         var labels = [Int](repeating: -1, count: mW * mH)
         var regionBounds: [(minX: Int, minY: Int, maxX: Int, maxY: Int, area: Int)] = []
         var labelCounter = 0
@@ -122,7 +427,6 @@ public class PanelDetector {
                     if cy < regionBounds[label].minY { regionBounds[label].minY = cy }
                     if cy > regionBounds[label].maxY { regionBounds[label].maxY = cy }
 
-                    // 4-connected neighbors
                     for (nx, ny) in [(cx-1, cy), (cx+1, cy), (cx, cy-1), (cx, cy+1)] {
                         guard nx >= 0, nx < mW, ny >= 0, ny < mH else { continue }
                         let nIdx = ny * mW + nx
@@ -134,25 +438,21 @@ public class PanelDetector {
             }
         }
 
-        // ── 6. Convert & Filter Bounding Contours ─────────────────────────────
         var candidates: [CGRect] = []
         let totalPixels = Double(mW * mH)
-        let minArea = totalPixels * 0.025   // must occupy at least 2.5% of the page to filter tiny text blocks
-        let maxArea = totalPixels * 0.95   // cannot occupy more than 95% of the page
+        let minArea = totalPixels * 0.025
+        let maxArea = totalPixels * 0.95
 
         for b in regionBounds {
             let w = b.maxX - b.minX + 1
             let h = b.maxY - b.minY + 1
             let area = Double(w * h)
             
-            // Reject if too small or too large
             guard area >= minArea, area <= maxArea else { continue }
             
-            // Aspect ratio check: reject extreme rectangular lines/strips
             let aspect = Double(w) / Double(h)
             guard aspect >= 0.1, aspect <= 10.0 else { continue }
             
-            // Convert to normalized coordinates [0.0, 1.0]
             let nX = Double(b.minX) / Double(mW)
             let nY = Double(b.minY) / Double(mH)
             let nW = Double(w) / Double(mW)
@@ -160,7 +460,6 @@ public class PanelDetector {
             candidates.append(CGRect(x: nX, y: nY, width: nW, height: nH))
         }
 
-        // --- Filter 1: Handle nested panels (giant container vs detail/text sub-regions) ---
         var toReject = Set<Int>()
         for i in 0..<candidates.count {
             let rectA = candidates[i]
@@ -171,7 +470,6 @@ public class PanelDetector {
                 if i == j { continue }
                 let rectB = candidates[j]
                 
-                // Is rectB fully inside rectA (with 0.01 margin)?
                 let isInside = rectB.minX >= rectA.minX - 0.01 &&
                                rectB.maxX <= rectA.maxX + 0.01 &&
                                rectB.minY >= rectA.minY - 0.01 &&
@@ -185,12 +483,9 @@ public class PanelDetector {
             }
             
             if !childrenIndices.isEmpty {
-                // rectA contains nested regions.
                 if areaA > 0.60 && childrenIndices.count >= 2 {
-                    // rectA is a giant outer container wrapping actual panels. Reject the container.
                     toReject.insert(i)
                 } else {
-                    // rectA is a normal panel containing text or minor details. Reject all children.
                     for childIdx in childrenIndices {
                         toReject.insert(childIdx)
                     }
@@ -205,9 +500,7 @@ public class PanelDetector {
             }
         }
 
-        // --- Filter 2: Reject heavily overlapping duplicate regions ---
         var finalRects: [CGRect] = []
-        // Sort from smallest to largest area (prefer tighter, smaller panel boundaries)
         let sortedCandidates = filtered.sorted { ($0.width * $0.height) < ($1.width * $1.height) }
         
         for rect in sortedCandidates {
@@ -217,8 +510,6 @@ public class PanelDetector {
                 if !intersection.isNull {
                     let interArea = intersection.width * intersection.height
                     let minArea = min(rect.width * rect.height, existing.width * existing.height)
-                    
-                    // If overlapping area is more than 80% of the smaller box area, it's a duplicate
                     if interArea / minArea > 0.8 {
                         shouldKeep = false
                         break
@@ -234,11 +525,10 @@ public class PanelDetector {
             return [CGRect(x: 0, y: 0, width: 1, height: 1)]
         }
 
-        // ── 7. Sort by reading order ──────────────────────────────────────────
         return sortRects(finalRects, direction: direction)
     }
 
-    // MARK: - Helpers
+    // MARK: - Shared Helpers
 
     public static func sortRects(_ rects: [CGRect], direction: ReadingDirection) -> [CGRect] {
         guard rects.count > 1 else { return rects }
@@ -269,7 +559,6 @@ public class PanelDetector {
     private static func detectMedianEdgeColor(raw: [UInt8], W: Int, H: Int, bpr: Int, bpp: Int) -> (r: Double, g: Double, b: Double, isDark: Bool) {
         var rs: [Double] = [], gs: [Double] = [], bs: [Double] = []
         
-        // Sample 1.5% inward from the edges to bypass outer scanner black lines/borders
         let edgeOffsetX = max(5, Int(Double(W) * 0.015))
         let edgeOffsetY = max(5, Int(Double(H) * 0.015))
         
@@ -305,6 +594,6 @@ public class PanelDetector {
         let medianB = bs[mid]
         let brightness = (medianR + medianG + medianB) / 3.0
         
-        return (medianR, medianG, medianB, brightness < 100.0)
+        return (medianR, medianG, medianB, brightness < 90.0)
     }
 }

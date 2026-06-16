@@ -43,8 +43,6 @@ public class PanelSnapper {
         //   buffer row 0 = visual top of image (ny=0)
         //   buffer row H-1 = visual bottom of image (ny=1)
         // Without this, all y-coordinate lookups read the wrong rows (upside-down).
-        ctx.translateBy(x: 0, y: CGFloat(H))
-        ctx.scaleBy(x: 1, y: -1)
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: W, height: H))
 
         // ── 1. Determine if background is dark or light, and define gutter test ─

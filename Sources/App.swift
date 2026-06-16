@@ -17,6 +17,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct PanelsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
+    init() {
+        if CommandLine.arguments.contains("--test") {
+            Task {
+                await runDetectorTest()
+                exit(0)
+            }
+            RunLoop.main.run()
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             MainSplitView()

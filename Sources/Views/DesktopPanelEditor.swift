@@ -12,6 +12,7 @@ public struct DesktopPanelEditor: View {
     @State private var dragStartRect: CGRect? = nil
     @State private var dragStartPoints: [CGPoint]? = nil
     @State private var isDetecting: Bool = false
+    @State private var detectionMode: PanelDetector.DetectionMode = .xycut
     
     public init(page: ComicPage, readingDirection: ReadingDirection, onSave: @escaping (ComicPage) -> Void) {
         self._page = State(initialValue: page)
@@ -235,6 +236,14 @@ public struct DesktopPanelEditor: View {
                             Label("Auto-Detect", systemImage: "wand.and.stars")
                         }
                         
+                        Picker("Detection Mode", selection: $detectionMode) {
+                            Text("XY-Cut").tag(PanelDetector.DetectionMode.xycut)
+                            Text("Contour").tag(PanelDetector.DetectionMode.contour)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 150)
+                        .labelsHidden()
+                        
                         if selectedPanelId != nil {
                             Button(action: runSnapActivePanel) {
                                 Label("Snap Box", systemImage: "sparkles")
@@ -345,7 +354,7 @@ public struct DesktopPanelEditor: View {
               let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         isDetecting = true
         Task {
-            let rects = await PanelDetector.detectPanels(in: cgImage, direction: readingDirection)
+            let rects = await PanelDetector.detectPanels(in: cgImage, direction: readingDirection, mode: detectionMode)
             page.panels = rects.enumerated().map { idx, rect in
                 ComicPanel(rect: rect, order: idx)
             }
