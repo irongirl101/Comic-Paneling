@@ -32,3 +32,7 @@ xcuserdata/
 *~
 *.tmp
 *.bak
+
+# Packaged App Distribution (upload to GitHub Releases, don't commit)
+Panels.app/
+Panels-macOS.zip

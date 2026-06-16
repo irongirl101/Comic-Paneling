@@ -10,6 +10,24 @@
 
 ---
 
+## Download
+
+If you just want to run the app without touching the source code, download the latest **Panels-macOS.zip** from the [Releases page](https://github.com/irongirl101/Comic-Paneling/releases).
+
+Unzip it, drag `Panels.app` into your `/Applications` folder, and open it.
+
+> **First launch note:** Because the app is not signed with an Apple Developer certificate, macOS will block it with a security warning the first time. To get past this, right-click (or Control-click) the app in Finder and choose **Open**, then click **Open** again in the dialog. You only need to do this once.
+>
+> Alternatively, from Terminal:
+> ```bash
+> xattr -cr /Applications/Panels.app
+> ```
+> Then open it normally.
+
+**System requirement:** macOS 14 Sonoma or later, Apple Silicon (arm64).
+
+---
+
 ## What is Panels?
 
 Panels is a dark-mode comic reader for macOS that automatically figures out where the panels are on each page and lets you step through them one at a time. Drop in a `.cbz` or `.zip` archive and the app handles the rest — no configuration needed.
@@ -120,6 +138,26 @@ Panels reads CBZ files (Comic Book ZIP), the most common DRM-free comic format.
 | Next panel | Right arrow key |
 | Previous panel | Left arrow key |
 | Zoom in / out | Cmd + / Cmd - or trackpad pinch |
+
+---
+
+## Building a Release Binary Yourself
+
+If you want to produce your own distributable (for example, to share with others or upload to a fork's releases page), run the included script:
+
+```bash
+git clone https://github.com/irongirl101/Comic-Paneling.git
+cd Comic-Paneling
+./build_app.sh
+```
+
+This will:
+
+1. Compile an optimised release build with `swift build -c release`
+2. Assemble a proper `Panels.app` bundle with the correct directory structure, `Info.plist`, app icon, and bundled resources
+3. Zip everything into `Panels-macOS.zip`, ready to upload to a GitHub Release
+
+The script prints the target architecture and macOS version at the end so you know exactly what the binary was built for.
 
 ---
 
