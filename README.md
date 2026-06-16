@@ -14,15 +14,15 @@
 
 If you just want to run the app without touching the source code, download the latest **Panels-macOS.zip** from the [Releases page](https://github.com/irongirl101/Comic-Paneling/releases).
 
-Unzip it, drag `Panels.app` into your `/Applications` folder, and open it.
+Unzip it, drag `Panels.app` into your `/Applications` folder, then open Terminal and run this before launching it:
 
-> **First launch note:** Because the app is not signed with an Apple Developer certificate, macOS will block it with a security warning the first time. To get past this, right-click (or Control-click) the app in Finder and choose **Open**, then click **Open** again in the dialog. You only need to do this once.
->
-> Alternatively, from Terminal:
-> ```bash
-> xattr -cr /Applications/Panels.app
-> ```
-> Then open it normally.
+```bash
+xattr -rd com.apple.quarantine /Applications/Panels.app
+```
+
+After that, double-click the app to open it normally.
+
+**Why is this needed?** Because the app is not signed with an Apple Developer certificate, macOS quarantines anything downloaded from the internet and will show a "damaged" error if you try to open it directly. The command above removes that quarantine flag. You only need to do it once.
 
 **System requirement:** macOS 14 Sonoma or later, Apple Silicon (arm64).
 
