@@ -116,7 +116,8 @@ public struct DesktopGuidedView: View {
 
     public var body: some View {
         GeometryReader { geo in
-            let containerSize = geo.size
+            let topPadding: CGFloat = 20
+            let containerSize = CGSize(width: geo.size.width, height: geo.size.height - topPadding)
             let imgSize = getImageSize(path: page.imagePath)
             let fitImageSize = calculateFitImageSize(imageSize: imgSize, containerSize: containerSize)
 
@@ -146,162 +147,162 @@ public struct DesktopGuidedView: View {
             let renderOffsetY = dragStartOffsetY ?? offsetY
 
             ZStack {
-                // ── 1. Black background ──────────────────────────────────────────
                 Color.black
 
-                // ── 2. Comic image ───────────────────────────────────────────────
-                // aspectRatio(.fit) in a containerSize frame renders the image at
-                // fitImageSize, centered. scaleEffect scales from the frame center.
-                ComicImage(path: page.imagePath)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: fitImageSize.width, height: fitImageSize.height)
-                    .scaleEffect(renderScale)
-                    .offset(x: renderOffsetX, y: renderOffsetY)
-
-                // ── 3. Dimming overlay with punched-out panel hole ───────────────
-                // compositingGroup isolates blending; destinationOut erases the
-                // panel-shaped area so the image below shows through unobscured.
                 ZStack {
-                    Color.black.opacity(isAdjusting ? 0.30 : 0.65)
-
-                    PanelPolygonShape(points: panelPoints)
+                    // ── 2. Comic image ───────────────────────────────────────────────
+                    // aspectRatio(.fit) in a containerSize frame renders the image at
+                    // fitImageSize, centered. scaleEffect scales from the frame center.
+                    ComicImage(path: page.imagePath)
+                        .aspectRatio(contentMode: .fit)
                         .frame(width: fitImageSize.width, height: fitImageSize.height)
                         .scaleEffect(renderScale)
                         .offset(x: renderOffsetX, y: renderOffsetY)
-                        .blendMode(.destinationOut)
-                }
-                .compositingGroup()
-                .allowsHitTesting(false)
 
-                // ── 4. Neon border tracing the panel ─────────────────────────────
-                SpotlightBorder(
-                    panelPoints: panelPoints,
-                    fitImageSize: fitImageSize,
-                    renderScale: renderScale,
-                    renderOffsetX: renderOffsetX,
-                    renderOffsetY: renderOffsetY
-                )
+                    // ── 3. Dimming overlay with punched-out panel hole ───────────────
+                    // compositingGroup isolates blending; destinationOut erases the
+                    // panel-shaped area so the image below shows through unobscured.
+                    ZStack {
+                        Color.black.opacity(isAdjusting ? 0.30 : 0.65)
 
-
-
-                // ── 5. Live calibration handles (adjust mode only) ───────────────
-                if isAdjusting {
-                    // Each handle is a Circle() placed with .position() in the
-                    // coordinate space of this ZStack (which is containerSize).
-                    // We convert normalized image-space point → container-space point
-                    // by applying the same transform the image uses:
-                    //   screen = (fitImageCenter + normalized offset) * scale + offset
-                    // Since fitImageSize is centered in containerSize:
-                    let fitOriginX = (containerSize.width  - fitImageSize.width)  / 2
-                    let fitOriginY = (containerSize.height - fitImageSize.height) / 2
-
-                    ForEach(0..<4, id: \.self) { idx in
-                        let p = panelPoints[idx]
-                        // Point in unscaled fitImage space
-                        let unscaledX = fitOriginX + p.x * fitImageSize.width
-                        let unscaledY = fitOriginY + p.y * fitImageSize.height
-                        // Apply the same scale-from-center + offset that the image uses
-                        let centerX = containerSize.width  / 2
-                        let centerY = containerSize.height / 2
-                        let px = centerX + (unscaledX - centerX) * renderScale + renderOffsetX
-                        let py = centerY + (unscaledY - centerY) * renderScale + renderOffsetY
-
-                        Circle()
-                            .fill(Color.cyan)
-                            .frame(width: 16, height: 16)
-                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                            .shadow(color: .black.opacity(0.6), radius: 3)
-                            .position(x: px, y: py)
-                            .gesture(
-                                DragGesture()
-                                    .onChanged { gesture in
-                                        if dragStartPoints == nil {
-                                            dragStartPoints = activePanel.getPoints()
-                                            dragStartScale   = targetScale
-                                            dragStartOffsetX = offsetX
-                                            dragStartOffsetY = offsetY
-                                        }
-                                        guard var startPoints = dragStartPoints,
-                                              let startScale  = dragStartScale else { return }
-
-                                        let dpX = gesture.translation.width  / (fitImageSize.width  * startScale)
-                                        let dpY = gesture.translation.height / (fitImageSize.height * startScale)
-
-                                        let pt   = startPoints[idx]
-                                        let newX = max(0.0, min(1.0, pt.x + dpX))
-                                        let newY = max(0.0, min(1.0, pt.y + dpY))
-                                        startPoints[idx] = CGPoint(x: newX, y: newY)
-
-                                        var updatedPanel = activePanel
-                                        updatedPanel.polygonPoints = startPoints
-
-                                        let xs = startPoints.map { $0.x }
-                                        let ys = startPoints.map { $0.y }
-                                        if let minX = xs.min(), let maxX = xs.max(),
-                                           let minY = ys.min(), let maxY = ys.max() {
-                                            updatedPanel.rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-                                        }
-                                        if activePanelIndex < page.panels.count {
-                                            page.panels[activePanelIndex] = updatedPanel
-                                        }
-                                    }
-                                    .onEnded { _ in
-                                        dragStartPoints = nil
-                                        dragStartScale   = nil
-                                        dragStartOffsetX = nil
-                                        dragStartOffsetY = nil
-                                        onAdjustEnded?()
-                                    }
-                            )
+                        PanelPolygonShape(points: panelPoints)
+                            .frame(width: fitImageSize.width, height: fitImageSize.height)
+                            .scaleEffect(renderScale)
+                            .offset(x: renderOffsetX, y: renderOffsetY)
+                            .blendMode(.destinationOut)
                     }
+                    .compositingGroup()
+                    .allowsHitTesting(false)
 
-                    // "Snap to Borders" button centered on the active panel
-                    let fitOriginX2 = (containerSize.width  - fitImageSize.width)  / 2
-                    let fitOriginY2 = (containerSize.height - fitImageSize.height) / 2
-                    let midNX = panelRect.midX
-                    let midNY = panelRect.midY
-                    let unscaledMidX = fitOriginX2 + midNX * fitImageSize.width
-                    let unscaledMidY = fitOriginY2 + midNY * fitImageSize.height
-                    let centerX2 = containerSize.width  / 2
-                    let centerY2 = containerSize.height / 2
-                    let btnX = centerX2 + (unscaledMidX - centerX2) * renderScale + renderOffsetX
-                    let btnY = centerY2 + (unscaledMidY - centerY2) * renderScale + renderOffsetY
+                    // ── 4. Neon border tracing the panel ─────────────────────────────
+                    SpotlightBorder(
+                        panelPoints: panelPoints,
+                        fitImageSize: fitImageSize,
+                        renderScale: renderScale,
+                        renderOffsetX: renderOffsetX,
+                        renderOffsetY: renderOffsetY
+                    )
 
-                    Button(action: {
-                        guard let nsImage = NSImage(contentsOfFile: page.imagePath),
-                              let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-                        let snapped = PanelSnapper.snapPoints(activePanel.getPoints(), in: cg)
+                    // ── 5. Live calibration handles (adjust mode only) ───────────────
+                    if isAdjusting {
+                        // Each handle is a Circle() placed with .position() in the
+                        // coordinate space of this ZStack (which is containerSize).
+                        // We convert normalized image-space point → container-space point
+                        // by applying the same transform the image uses:
+                        //   screen = (fitImageCenter + normalized offset) * scale + offset
+                        // Since fitImageSize is centered in containerSize:
+                        let fitOriginX = (containerSize.width  - fitImageSize.width)  / 2
+                        let fitOriginY = (containerSize.height - fitImageSize.height) / 2
 
-                        var updatedPanel = activePanel
-                        updatedPanel.polygonPoints = snapped
+                        ForEach(0..<4, id: \.self) { idx in
+                            let p = panelPoints[idx]
+                            // Point in unscaled fitImage space
+                            let unscaledX = fitOriginX + p.x * fitImageSize.width
+                            let unscaledY = fitOriginY + p.y * fitImageSize.height
+                            // Apply the same scale-from-center + offset that the image uses
+                            let centerX = containerSize.width  / 2
+                            let centerY = containerSize.height / 2
+                            let px = centerX + (unscaledX - centerX) * renderScale + renderOffsetX
+                            let py = centerY + (unscaledY - centerY) * renderScale + renderOffsetY
 
-                        let xs = snapped.map { $0.x }
-                        let ys = snapped.map { $0.y }
-                        if let minX = xs.min(), let maxX = xs.max(),
-                           let minY = ys.min(), let maxY = ys.max() {
-                            updatedPanel.rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                            Circle()
+                                .fill(Color.cyan)
+                                .frame(width: 16, height: 16)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(color: .black.opacity(0.6), radius: 3)
+                                .position(x: px, y: py)
+                                .gesture(
+                                    DragGesture()
+                                        .onChanged { gesture in
+                                            if dragStartPoints == nil {
+                                                dragStartPoints = activePanel.getPoints()
+                                                dragStartScale   = targetScale
+                                                dragStartOffsetX = offsetX
+                                                dragStartOffsetY = offsetY
+                                            }
+                                            guard var startPoints = dragStartPoints,
+                                                  let startScale  = dragStartScale else { return }
+
+                                            let dpX = gesture.translation.width  / (fitImageSize.width  * startScale)
+                                            let dpY = gesture.translation.height / (fitImageSize.height * startScale)
+
+                                            let pt   = startPoints[idx]
+                                            let newX = max(0.0, min(1.0, pt.x + dpX))
+                                            let newY = max(0.0, min(1.0, pt.y + dpY))
+                                            startPoints[idx] = CGPoint(x: newX, y: newY)
+
+                                            var updatedPanel = activePanel
+                                            updatedPanel.polygonPoints = startPoints
+
+                                            let xs = startPoints.map { $0.x }
+                                            let ys = startPoints.map { $0.y }
+                                            if let minX = xs.min(), let maxX = xs.max(),
+                                               let minY = ys.min(), let maxY = ys.max() {
+                                                updatedPanel.rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                                            }
+                                            if activePanelIndex < page.panels.count {
+                                                page.panels[activePanelIndex] = updatedPanel
+                                            }
+                                        }
+                                        .onEnded { _ in
+                                            dragStartPoints = nil
+                                            dragStartScale   = nil
+                                            dragStartOffsetX = nil
+                                            dragStartOffsetY = nil
+                                            onAdjustEnded?()
+                                        }
+                                )
                         }
-                        if activePanelIndex < page.panels.count {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                page.panels[activePanelIndex] = updatedPanel
+
+                        // "Snap to Borders" button centered on the active panel
+                        let fitOriginX2 = (containerSize.width  - fitImageSize.width)  / 2
+                        let fitOriginY2 = (containerSize.height - fitImageSize.height) / 2
+                        let midNX = panelRect.midX
+                        let midNY = panelRect.midY
+                        let unscaledMidX = fitOriginX2 + midNX * fitImageSize.width
+                        let unscaledMidY = fitOriginY2 + midNY * fitImageSize.height
+                        let centerX2 = containerSize.width  / 2
+                        let centerY2 = containerSize.height / 2
+                        let btnX = centerX2 + (unscaledMidX - centerX2) * renderScale + renderOffsetX
+                        let btnY = centerY2 + (unscaledMidY - centerY2) * renderScale + renderOffsetY
+
+                        Button(action: {
+                            guard let nsImage = NSImage(contentsOfFile: page.imagePath),
+                                  let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+                            let snapped = PanelSnapper.snapPoints(activePanel.getPoints(), in: cg)
+
+                            var updatedPanel = activePanel
+                            updatedPanel.polygonPoints = snapped
+
+                            let xs = snapped.map { $0.x }
+                            let ys = snapped.map { $0.y }
+                            if let minX = xs.min(), let maxX = xs.max(),
+                               let minY = ys.min(), let maxY = ys.max() {
+                                updatedPanel.rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
                             }
-                            onAdjustEnded?()
+                            if activePanelIndex < page.panels.count {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    page.panels[activePanelIndex] = updatedPanel
+                                }
+                                onAdjustEnded?()
+                            }
+                        }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "sparkles")
+                                Text("Snap to Borders")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(Color.cyan))
+                            .shadow(radius: 3)
                         }
-                    }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "sparkles")
-                            Text("Snap to Borders")
-                                .font(.system(size: 11, weight: .bold))
-                        }
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(Color.cyan))
-                        .shadow(radius: 3)
+                        .buttonStyle(.plain)
+                        .position(x: btnX, y: btnY)
                     }
-                    .buttonStyle(.plain)
-                    .position(x: btnX, y: btnY)
                 }
+                .padding(.top, topPadding)
             }
             .animation(.spring(response: 0.45, dampingFraction: 0.85, blendDuration: 0), value: activePanelIndex)
             .animation(.spring(response: 0.45, dampingFraction: 0.85, blendDuration: 0), value: page.id)

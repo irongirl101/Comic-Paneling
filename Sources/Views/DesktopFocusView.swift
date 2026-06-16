@@ -11,7 +11,8 @@ public struct DesktopFocusView: View {
     
     public var body: some View {
         GeometryReader { containerGeo in
-            let containerSize = containerGeo.size
+            let topPadding: CGFloat = 20
+            let containerSize = CGSize(width: containerGeo.size.width, height: containerGeo.size.height - topPadding)
             let imgSize = getImageSize(path: page.imagePath)
             let fitImageSize = calculateFitImageSize(imageSize: imgSize, containerSize: containerSize)
             
@@ -34,6 +35,8 @@ public struct DesktopFocusView: View {
             
             ZStack {
                 Color.black
+
+                ZStack {
                 
                 ComicImage(path: page.imagePath)
                     .aspectRatio(contentMode: .fit)
@@ -78,8 +81,10 @@ public struct DesktopFocusView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .allowsHitTesting(false)
+                }
+                .padding(.top, topPadding)
             }
-            .frame(width: containerSize.width, height: containerSize.height)
+            .frame(width: containerGeo.size.width, height: containerGeo.size.height)
             .clipped()
             .animation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0), value: activePanelIndex)
             .animation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0), value: page.id)

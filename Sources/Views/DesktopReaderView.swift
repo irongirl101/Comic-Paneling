@@ -27,7 +27,7 @@ public struct DesktopReaderView: View {
         let isRTL = book.readingDirection == .rightToLeft
         
         ZStack {
-            Color.black.edgesIgnoringSafeArea(.all)
+            Color.black
             
             if !book.pages.isEmpty {
                 let currentPage = book.pages[currentPageIndex]
@@ -135,17 +135,6 @@ public struct DesktopReaderView: View {
                         Spacer()
                         
                         HStack(spacing: 8) {
-                            Button(action: { isAdjustingPanel.toggle() }) {
-                                Label(isAdjustingPanel ? "Done" : "Adjust Panel", systemImage: isAdjustingPanel ? "checkmark.circle.fill" : "crop")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(isAdjustingPanel ? .green : .white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(RoundedRectangle(cornerRadius: 8).fill(isAdjustingPanel ? Color.green.opacity(0.2) : Color.white.opacity(0.12)))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Tweak active panel's 4 corner shapes in real-time")
-                            
                             Button(action: { showEditor = true }) {
                                 Label("Edit Page", systemImage: "rectangle.and.pencil.and.ellipsis")
                                     .font(.system(size: 13, weight: .medium))
@@ -211,6 +200,9 @@ public struct DesktopReaderView: View {
                 }
             }
         }
+        .ignoresSafeArea()
+        .toolbar(.hidden)
+        .navigationTitle("")
         // Native Keyboard Event Handlers
         .focusable()
         .focused($isReaderFocused)

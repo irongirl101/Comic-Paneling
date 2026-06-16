@@ -30,7 +30,7 @@ struct PanelsApp: App {
     var body: some Scene {
         WindowGroup {
             MainSplitView()
-                .frame(minWidth: 700, minHeight: 500)
+                .frame(minWidth: 500, minHeight: 850)
                 .background(Color.black)
         }
         .commands {
