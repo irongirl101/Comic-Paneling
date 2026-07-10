@@ -1,5 +1,6 @@
 import Foundation
 import ZIPFoundation
+import Unrar
 import CoreGraphics
 import AppKit
 
@@ -10,27 +11,57 @@ class SwiftPlatformBridge: SharedComicImporterPlatformBridge {
     func unzip(zipFilePath: String, destFolder: String) -> [String] {
         let zipURL = URL(fileURLWithPath: zipFilePath)
         let destURL = URL(fileURLWithPath: destFolder)
-        do {
-            try FileManager.default.unzipItem(at: zipURL, to: destURL)
-            var imageURLs: [URL] = []
-            let resourceKeys: [URLResourceKey] = [.isDirectoryKey]
-            guard let enumerator = FileManager.default.enumerator(at: destURL, includingPropertiesForKeys: resourceKeys, options: [.skipsHiddenFiles]) else {
+        let isRar = ["rar", "cbr"].contains(zipURL.pathExtension.lowercased())
+        
+        if isRar {
+            do {
+                let archive = try Archive(path: zipURL.path)
+                var imageURLs: [URL] = []
+                let entries = try archive.entries()
+                for entry in entries {
+                    if entry.directory { continue }
+                    let path = entry.fileName
+                    let filename = URL(fileURLWithPath: path).lastPathComponent
+                    if path.lowercased().contains("__macosx") || filename.hasPrefix(".") {
+                        continue
+                    }
+                    let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+                    if ["jpg", "jpeg", "png", "webp", "gif"].contains(ext) {
+                        let flatName = path.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "\\", with: "_")
+                        let outFileURL = destURL.appendingPathComponent(flatName)
+                        let data = try archive.extract(entry)
+                        try data.write(to: outFileURL)
+                        imageURLs.append(outFileURL)
+                    }
+                }
+                imageURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+                return imageURLs.map { $0.path }
+            } catch {
                 return []
             }
-            while let url = enumerator.nextObject() as? URL {
-                let resourceValues = try url.resourceValues(forKeys: Set(resourceKeys))
-                if let isDirectory = resourceValues.isDirectory, isDirectory {
-                    continue
+        } else {
+            do {
+                try FileManager.default.unzipItem(at: zipURL, to: destURL)
+                var imageURLs: [URL] = []
+                let resourceKeys: [URLResourceKey] = [.isDirectoryKey]
+                guard let enumerator = FileManager.default.enumerator(at: destURL, includingPropertiesForKeys: resourceKeys, options: [.skipsHiddenFiles]) else {
+                    return []
                 }
-                let ext = url.pathExtension.lowercased()
-                if ["jpg", "jpeg", "png", "webp", "gif"].contains(ext) {
-                    imageURLs.append(url)
+                while let url = enumerator.nextObject() as? URL {
+                    let resourceValues = try url.resourceValues(forKeys: Set(resourceKeys))
+                    if let isDirectory = resourceValues.isDirectory, isDirectory {
+                        continue
+                    }
+                    let ext = url.pathExtension.lowercased()
+                    if ["jpg", "jpeg", "png", "webp", "gif"].contains(ext) {
+                        imageURLs.append(url)
+                    }
                 }
+                imageURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+                return imageURLs.map { $0.path }
+            } catch {
+                return []
             }
-            imageURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-            return imageURLs.map { $0.path }
-        } catch {
-            return []
         }
     }
 
@@ -125,24 +156,46 @@ public final class ComicImporter: Sendable {
         return book
         #else
         
-        try fileManager.unzipItem(at: fileURL, to: bookDir)
-        
         var imageURLs: [URL] = []
-        let resourceKeys: [URLResourceKey] = [.isDirectoryKey]
+        let isRar = ["rar", "cbr"].contains(fileURL.pathExtension.lowercased())
         
-        guard let enumerator = fileManager.enumerator(at: bookDir, includingPropertiesForKeys: resourceKeys, options: [.skipsHiddenFiles]) else {
-            throw NSError(domain: "ComicImporter", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to read unzipped contents"])
-        }
-        
-        while let url = enumerator.nextObject() as? URL {
-            let resourceValues = try url.resourceValues(forKeys: Set(resourceKeys))
-            if let isDirectory = resourceValues.isDirectory, isDirectory {
-                continue
+        if isRar {
+            let archive = try Archive(path: fileURL.path)
+            let entries = try archive.entries()
+            for entry in entries {
+                if entry.directory { continue }
+                let path = entry.fileName
+                let filename = URL(fileURLWithPath: path).lastPathComponent
+                if path.lowercased().contains("__macosx") || filename.hasPrefix(".") {
+                    continue
+                }
+                let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+                if ["jpg", "jpeg", "png", "webp", "gif"].contains(ext) {
+                    let flatName = path.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "\\", with: "_")
+                    let outFileURL = bookDir.appendingPathComponent(flatName)
+                    let data = try archive.extract(entry)
+                    try data.write(to: outFileURL)
+                    imageURLs.append(outFileURL)
+                }
+            }
+        } else {
+            try fileManager.unzipItem(at: fileURL, to: bookDir)
+            
+            let resourceKeys: [URLResourceKey] = [.isDirectoryKey]
+            guard let enumerator = fileManager.enumerator(at: bookDir, includingPropertiesForKeys: resourceKeys, options: [.skipsHiddenFiles]) else {
+                throw NSError(domain: "ComicImporter", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to read unzipped contents"])
             }
             
-            let ext = url.pathExtension.lowercased()
-            if ["jpg", "jpeg", "png", "webp", "gif"].contains(ext) {
-                imageURLs.append(url)
+            while let url = enumerator.nextObject() as? URL {
+                let resourceValues = try url.resourceValues(forKeys: Set(resourceKeys))
+                if let isDirectory = resourceValues.isDirectory, isDirectory {
+                    continue
+                }
+                
+                let ext = url.pathExtension.lowercased()
+                if ["jpg", "jpeg", "png", "webp", "gif"].contains(ext) {
+                    imageURLs.append(url)
+                }
             }
         }
         

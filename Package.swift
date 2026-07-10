@@ -7,7 +7,8 @@ let hasSharedFramework = FileManager.default.fileExists(
 )
 
 var appDependencies: [Target.Dependency] = [
-    .product(name: "ZIPFoundation", package: "ZIPFoundation")
+    .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+    .product(name: "Unrar", package: "Unrar.swift")
 ]
 
 var targets: [Target] = []
@@ -42,7 +43,8 @@ let package = Package(
         .executable(name: "Panels", targets: ["Panels"])
     ],
     dependencies: [
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.19")
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.19"),
+        .package(url: "https://github.com/mtgto/Unrar.swift.git", from: "0.5.4")
     ],
     targets: targets
 )

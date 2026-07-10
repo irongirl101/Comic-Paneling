@@ -1,6 +1,7 @@
 package com.paneling.android
 
 import android.content.Context
+import com.github.junrar.Archive
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -110,40 +111,71 @@ class MainActivity : ComponentActivity() {
 
 class AndroidPlatformBridge(private val context: Context) : SharedComicImporter.PlatformBridge {
     override fun unzip(zipFilePath: String, destFolder: String): List<String> {
-        val zipFile = java.util.zip.ZipFile(zipFilePath)
         val destDir = File(destFolder)
         destDir.mkdirs()
         
-        val entries = zipFile.entries()
         val imageFiles = mutableListOf<File>()
+        val isRar = zipFilePath.lowercase().let { it.endsWith(".rar") || it.endsWith(".cbr") }
         
-        while (entries.hasMoreElements()) {
-            val entry = entries.nextElement()
-            if (entry.isDirectory) continue
-            
-            val path = entry.name
-            val filename = File(path).name
-            
-            // Ignore macOS metadata, resource forks, and hidden files
-            if (path.contains("__MACOSX", ignoreCase = true) || filename.startsWith(".")) {
-                continue
-            }
-            
-            val lowerName = filename.lowercase()
-            if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".png") || lowerName.endsWith(".webp")) {
-                // Flatten the file path with underscores to prevent name collisions and fit context layout
-                val flatName = path.replace('/', '_').replace('\\', '_')
-                val outFile = File(destDir, flatName)
-                
-                zipFile.getInputStream(entry).use { input ->
-                    outFile.outputStream().use { output ->
-                        input.copyTo(output)
+        if (isRar) {
+            val rarFile = File(zipFilePath)
+            Archive(rarFile).use { archive ->
+                for (fileHeader in archive) {
+                    if (fileHeader.isDirectory) continue
+                    
+                    val path = fileHeader.fileName
+                    val filename = File(path).name
+                    
+                    if (path.contains("__MACOSX", ignoreCase = true) || filename.startsWith(".")) {
+                        continue
+                    }
+                    
+                    val lowerName = filename.lowercase()
+                    if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".png") || lowerName.endsWith(".webp")) {
+                        val flatName = path.replace('/', '_').replace('\\', '_')
+                        val outFile = File(destDir, flatName)
+                        
+                        archive.getInputStream(fileHeader).use { input ->
+                            outFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        imageFiles.add(outFile)
                     }
                 }
-                imageFiles.add(outFile)
+            }
+        } else {
+            val zipFile = java.util.zip.ZipFile(zipFilePath)
+            try {
+                val entries = zipFile.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    if (entry.isDirectory) continue
+                    
+                    val path = entry.name
+                    val filename = File(path).name
+                    
+                    if (path.contains("__MACOSX", ignoreCase = true) || filename.startsWith(".")) {
+                        continue
+                    }
+                    
+                    val lowerName = filename.lowercase()
+                    if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".png") || lowerName.endsWith(".webp")) {
+                        val flatName = path.replace('/', '_').replace('\\', '_')
+                        val outFile = File(destDir, flatName)
+                        
+                        zipFile.getInputStream(entry).use { input ->
+                            outFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        imageFiles.add(outFile)
+                    }
+                }
+            } finally {
+                zipFile.close()
             }
         }
-        zipFile.close()
         
         if (imageFiles.isEmpty()) {
             throw Exception("No valid image pages (.jpg, .png, .webp) found inside the archive")
@@ -351,10 +383,11 @@ fun LibraryScreen(
                         displayName = uri.lastPathSegment ?: "Imported Comic.zip"
                     }
                     val title = displayName.substringBeforeLast(".")
+                    val extension = displayName.substringAfterLast(".", "zip").lowercase()
                     
-                    val tempZip = File(context.cacheDir, "temp_import.zip")
+                    val tempFile = File(context.cacheDir, "temp_import.$extension")
                     context.contentResolver.openInputStream(uri)?.use { input ->
-                        FileOutputStream(tempZip).use { output ->
+                        FileOutputStream(tempFile).use { output ->
                             input.copyTo(output)
                         }
                     }
@@ -366,7 +399,7 @@ fun LibraryScreen(
                     val bridge = AndroidPlatformBridge(context)
                     val book = SharedComicImporter.importComic(
                         bridge = bridge,
-                        zipFilePath = tempZip.absolutePath,
+                        zipFilePath = tempFile.absolutePath,
                         destFolder = destFolder.absolutePath,
                         title = title
                     )
@@ -375,7 +408,7 @@ fun LibraryScreen(
                     val json = Json { prettyPrint = true }
                     metadataFile.writeText(json.encodeToString(ComicBook.serializer(), book))
                     
-                    tempZip.delete()
+                    tempFile.delete()
                     
                     Handler(Looper.getMainLooper()).post {
                         isImporting = false
@@ -423,7 +456,7 @@ fun LibraryScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "Import a .cbz file to read",
+                        text = "Import a .cbz or .cbr file to read",
                         fontSize = 11.sp,
                         color = Color.Gray
                     )
@@ -641,7 +674,7 @@ fun ReaderScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(book.id) {
+            .pointerInput(book.id, currentPageIndex) {
                 awaitEachGesture {
                     var dragAccumulatedX = 0f
                     var isZooming = false
