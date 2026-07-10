@@ -1,6 +1,20 @@
 import CoreGraphics
 import Foundation
 
+#if canImport(SharedPaneling)
+import SharedPaneling
+
+extension KotlinByteArray {
+    static func from(_ array: [UInt8]) -> KotlinByteArray {
+        let ktArray = KotlinByteArray(size: Int32(array.count))
+        for i in 0..<array.count {
+            ktArray.set(index: Int32(i), value: Int8(bitPattern: array[i]))
+        }
+        return ktArray
+    }
+}
+#endif
+
 /// PanelSnapper: Finds the exact polygon boundary of a comic panel by scanning
 /// **inward from outside** the panel's approximate boundary for each row.
 ///
@@ -27,6 +41,31 @@ public class PanelSnapper {
 
         let W = cgImage.width, H = cgImage.height
         guard W > 4, H > 4 else { return points }
+
+        #if canImport(SharedPaneling)
+        let bpp = 4, bpr = bpp * W
+        var raw = [UInt8](repeating: 0, count: H * bpr)
+
+        guard let ctx = CGContext(
+            data: &raw, width: W, height: H,
+            bitsPerComponent: 8, bytesPerRow: bpr,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return points }
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: W, height: H))
+
+        let ktPoints = points.map { SharedPaneling.PointF(x: Double($0.x), y: Double($0.y)) }
+        let ktRaw = KotlinByteArray.from(raw)
+        
+        let ktSnapped = SharedPaneling.PanelSnapper.shared.snapPoints(
+            points: ktPoints,
+            raw: ktRaw,
+            W: Int32(W),
+            H: Int32(H)
+        )
+        
+        return ktSnapped.map { CGPoint(x: $0.x, y: $0.y) }
+        #else
 
         let bpp = 4, bpr = bpp * W
         var raw = [UInt8](repeating: 0, count: H * bpr)
@@ -213,6 +252,7 @@ public class PanelSnapper {
             CGPoint(x: nx(brPx), y: ny(finalBot)),  // BR
             CGPoint(x: nx(blPx), y: ny(finalBot))   // BL
         ]
+        #endif
     }
 
     private static func isPageBackgroundDark(raw: [UInt8], W: Int, H: Int, bpr: Int, bpp: Int) -> Bool {

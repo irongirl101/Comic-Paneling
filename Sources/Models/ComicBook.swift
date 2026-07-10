@@ -79,3 +79,102 @@ extension Collection {
         return indices.contains(index) ? self[index] : nil
     }
 }
+
+#if canImport(SharedPaneling)
+import SharedPaneling
+
+extension ReadingDirection {
+    public func toKotlin() -> SharedPaneling.ReadingDirection {
+        switch self {
+        case .leftToRight: return .leftToRight
+        case .rightToLeft: return .rightToLeft
+        }
+    }
+    
+    public static func fromKotlin(_ direction: SharedPaneling.ReadingDirection) -> ReadingDirection {
+        switch direction {
+        case .leftToRight: return .leftToRight
+        case .rightToLeft: return .rightToLeft
+        default: return .leftToRight
+        }
+    }
+}
+
+extension ComicPanel {
+    public func toKotlin() -> SharedPaneling.ComicPanel {
+        let pts = polygonPoints?.map { SharedPaneling.PointF(x: Double($0.x), y: Double($0.y)) }
+        let kRect = SharedPaneling.RectF(
+            x: Double(rect.origin.x),
+            y: Double(rect.origin.y),
+            width: Double(rect.width),
+            height: Double(rect.height)
+        )
+        return SharedPaneling.ComicPanel(
+            id: id.uuidString,
+            rect: kRect,
+            order: Int32(order),
+            polygonPoints: pts
+        )
+    }
+    
+    public init(from kotlinPanel: SharedPaneling.ComicPanel) {
+        let kRect = kotlinPanel.rect
+        let rect = CGRect(x: kRect.x, y: kRect.y, width: kRect.width, height: kRect.height)
+        let points = kotlinPanel.polygonPoints?.map { CGPoint(x: $0.x, y: $0.y) }
+        self.init(
+            id: UUID(uuidString: kotlinPanel.id) ?? UUID(),
+            rect: rect,
+            order: Int(kotlinPanel.order),
+            polygonPoints: points
+        )
+    }
+}
+
+extension ComicPage {
+    public func toKotlin() -> SharedPaneling.ComicPage {
+        return SharedPaneling.ComicPage(
+            id: id.uuidString,
+            pageNumber: Int32(pageNumber),
+            imagePath: imagePath,
+            panels: panels.map { $0.toKotlin() },
+            isCustomImported: isCustomImported
+        )
+    }
+    
+    public init(from kotlinPage: SharedPaneling.ComicPage) {
+        self.init(
+            id: UUID(uuidString: kotlinPage.id) ?? UUID(),
+            pageNumber: Int(kotlinPage.pageNumber),
+            imagePath: kotlinPage.imagePath,
+            panels: kotlinPage.panels.map { ComicPanel(from: $0) },
+            isCustomImported: kotlinPage.isCustomImported
+        )
+    }
+}
+
+extension ComicBook {
+    public func toKotlin() -> SharedPaneling.ComicBook {
+        return SharedPaneling.ComicBook(
+            id: id.uuidString,
+            title: title,
+            author: author,
+            coverImagePath: coverImagePath,
+            readingDirection: readingDirection.toKotlin(),
+            pages: pages.map { $0.toKotlin() },
+            isCustomImported: isCustomImported
+        )
+    }
+    
+    public init(from kotlinBook: SharedPaneling.ComicBook) {
+        self.init(
+            id: UUID(uuidString: kotlinBook.id) ?? UUID(),
+            title: kotlinBook.title,
+            author: kotlinBook.author,
+            coverImagePath: kotlinBook.coverImagePath,
+            readingDirection: ReadingDirection.fromKotlin(kotlinBook.readingDirection),
+            pages: kotlinBook.pages.map { ComicPage(from: $0) },
+            isCustomImported: kotlinBook.isCustomImported
+        )
+    }
+}
+#endif

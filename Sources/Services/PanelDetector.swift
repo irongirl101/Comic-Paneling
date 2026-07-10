@@ -2,6 +2,20 @@ import Foundation
 import CoreGraphics
 import Vision
 
+#if canImport(SharedPaneling)
+import SharedPaneling
+
+extension KotlinByteArray {
+    static func from(_ array: [UInt8]) -> KotlinByteArray {
+        let ktArray = KotlinByteArray(size: Int32(array.count))
+        for i in 0..<array.count {
+            ktArray.set(index: Int32(i), value: Int8(bitPattern: array[i]))
+        }
+        return ktArray
+    }
+}
+#endif
+
 public class PanelDetector {
 
     public enum DetectionMode {
@@ -15,12 +29,33 @@ public class PanelDetector {
         direction: ReadingDirection = .leftToRight,
         mode: DetectionMode = .xycut
     ) async -> [CGRect] {
+        #if canImport(SharedPaneling)
+        guard let bufferInfo = getDownscaledRawBuffer(from: cgImage) else {
+            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        }
+        
+        let ktRaw = KotlinByteArray.from(bufferInfo.raw)
+        let ktDirection = direction.toKotlin()
+        let ktMode = mode == .contour ? SharedPaneling.PanelDetectorDetectionMode.contour : SharedPaneling.PanelDetectorDetectionMode.xycut
+        
+        let ktRects = SharedPaneling.PanelDetector.shared.detectPanels(
+            raw: ktRaw,
+            width: Int32(bufferInfo.width),
+            height: Int32(bufferInfo.height),
+            bytesPerRow: Int32(bufferInfo.bytesPerRow),
+            direction: ktDirection,
+            mode: ktMode
+        )
+        
+        return ktRects.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
+        #else
         switch mode {
         case .contour:
             return await detectPanelsContour(in: cgImage, direction: direction)
         case .xycut:
             return detectPanelsXYCut(in: cgImage, direction: direction)
         }
+        #endif
     }
 
     // MARK: - Optimization Helpers
