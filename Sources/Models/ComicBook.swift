@@ -177,4 +177,26 @@ extension ComicBook {
         )
     }
 }
+
+extension ComicProgress {
+    public func toKotlin() -> SharedPaneling.ComicProgress {
+        return SharedPaneling.ComicProgress(
+            bookId: bookId.uuidString,
+            currentPageIndex: Int32(currentPageIndex),
+            currentPanelIndex: Int32(currentPanelIndex),
+            isCompleted: isCompleted,
+            lastReadDate: Int64(lastReadDate.timeIntervalSince1970 * 1000)
+        )
+    }
+    
+    public init(from kotlinProgress: SharedPaneling.ComicProgress) {
+        self.init(
+            bookId: UUID(uuidString: kotlinProgress.bookId) ?? UUID(),
+            currentPageIndex: Int(kotlinProgress.currentPageIndex),
+            currentPanelIndex: Int(kotlinProgress.currentPanelIndex),
+            isCompleted: kotlinProgress.isCompleted,
+            lastReadDate: Date(timeIntervalSince1970: Double(kotlinProgress.lastReadDate) / 1000.0)
+        )
+    }
+}
 #endif

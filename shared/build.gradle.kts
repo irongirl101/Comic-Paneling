@@ -17,18 +17,18 @@ kotlin {
     }
     
     // Define the XCFramework
-    val xcf = XCFramework("SharedPaneling")
+    // val xcf = XCFramework("SharedPaneling")
     
     // macOS targets
-    listOf(
-        macosArm64(),
-        macosX64()
-    ).forEach { macTarget ->
-        macTarget.binaries.framework {
-            baseName = "SharedPaneling"
-            xcf.add(this)
-        }
-    }
+    // listOf(
+    //     macosArm64(),
+    //     macosX64()
+    // ).forEach { macTarget ->
+    //     macTarget.binaries.framework {
+    //         baseName = "SharedPaneling"
+    //         xcf.add(this)
+    //     }
+    // }
 
     sourceSets {
         commonMain.dependencies {

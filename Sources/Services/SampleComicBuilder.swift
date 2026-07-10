@@ -1,6 +1,20 @@
 import Foundation
 import CoreGraphics
 
+#if canImport(SharedPaneling)
+import SharedPaneling
+
+class SwiftSampleComicBridge: SharedSampleComicBuilderPlatformBridge {
+    func findResourcePath(subpath: String) -> String {
+        return SampleComicBuilder.findResourcePath(subpath: subpath)
+    }
+    
+    func generateUuid() -> String {
+        return UUID().uuidString
+    }
+}
+#endif
+
 public class SampleComicBuilder {
     
     public static func findResourcePath(subpath: String) -> String {
@@ -37,6 +51,11 @@ public class SampleComicBuilder {
     }
     
     public static func buildSampleComics() -> [ComicBook] {
+        #if canImport(SharedPaneling)
+        let bridge = SwiftSampleComicBridge()
+        let ktList = SharedSampleComicBuilder.shared.buildSampleComics(bridge: bridge)
+        return ktList.map { ComicBook(from: $0) }
+        #else
         var books: [ComicBook] = []
         
         // 1. Antigravity Man (Left-to-Right)
@@ -72,5 +91,6 @@ public class SampleComicBuilder {
         )
         books.append(agBook)
                 return books
+        #endif
     }
 }
