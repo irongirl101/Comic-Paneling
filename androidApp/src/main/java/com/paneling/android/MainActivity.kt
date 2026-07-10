@@ -10,6 +10,7 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +39,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -49,6 +51,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -60,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -81,6 +85,7 @@ enum class ReaderViewMode {
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(
@@ -228,16 +233,6 @@ class AndroidStorageBridge(private val context: Context) : SharedReadingProgress
     }
 }
 
-class AndroidSampleBridge(private val context: Context) : SharedSampleComicBuilder.PlatformBridge {
-    override fun findResourcePath(subpath: String): String {
-        return subpath
-    }
-
-    override fun generateUuid(): String {
-        return UUID.randomUUID().toString()
-    }
-}
-
 @Composable
 fun PanelsAppContainer() {
     val context = LocalContext.current
@@ -246,14 +241,10 @@ fun PanelsAppContainer() {
     var currentScreen by remember { mutableStateOf(AppScreen.LIBRARY) }
     var activeBook by remember { mutableStateOf<ComicBook?>(null) }
     
-    var sampleComics by remember { mutableStateOf<List<ComicBook>>(emptyList()) }
     var importedComics by remember { mutableStateOf<List<ComicBook>>(emptyList()) }
-    
     var progresses by remember { mutableStateOf<Map<String, ComicProgress>>(emptyMap()) }
     
     fun reloadComics() {
-        val sampleBridge = AndroidSampleBridge(context)
-        sampleComics = SharedSampleComicBuilder.buildSampleComics(sampleBridge)
         importedComics = loadImportedComics(context)
         progresses = SharedReadingProgressManager.loadProgress(storageBridge)
     }
@@ -265,7 +256,6 @@ fun PanelsAppContainer() {
     when (currentScreen) {
         AppScreen.LIBRARY -> {
             LibraryScreen(
-                sampleComics = sampleComics,
                 importedComics = importedComics,
                 progresses = progresses,
                 onBookSelected = { book ->
@@ -333,7 +323,6 @@ fun loadImportedComics(context: Context): List<ComicBook> {
 
 @Composable
 fun LibraryScreen(
-    sampleComics: List<ComicBook>,
     importedComics: List<ComicBook>,
     progresses: Map<String, ComicProgress>,
     onBookSelected: (ComicBook) -> Unit,
@@ -408,6 +397,7 @@ fun LibraryScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF08080C))
+            .safeDrawingPadding()
             .padding(16.dp)
     ) {
         Row(
@@ -433,7 +423,7 @@ fun LibraryScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "Import a .cbz file or select a classic below",
+                        text = "Import a .cbz file to read",
                         fontSize = 11.sp,
                         color = Color.Gray
                     )
@@ -442,18 +432,22 @@ fun LibraryScreen(
             
             Button(
                 onClick = { filePickerLauncher.launch("*/*") },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1)),
-                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF08080C)
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(20.dp),
                 enabled = !isImporting
             ) {
                 if (isImporting) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = Color.White
+                        color = Color(0xFF08080C)
                     )
                 } else {
-                    Text("Import Comic", fontWeight = FontWeight.Bold)
+                    Text("Import Comic", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -466,29 +460,30 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            if (sampleComics.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Sample Classics",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+            if (importedComics.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 60.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Your library is empty.\nTap 'Import Comic' above to start reading!",
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
-                items(sampleComics) { book ->
-                    ComicCard(book = book, progress = progresses[book.id], onClick = { onBookSelected(book) })
-                }
-            }
-            
-            if (importedComics.isNotEmpty()) {
-                item {
+            } else {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         text = "My Imports",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
                 items(importedComics) { book ->
@@ -548,7 +543,7 @@ fun ComicCard(
                     (it.currentPageIndex + 1).toFloat() / book.pages.size.toFloat()
                 } else 0f
                 LinearProgressIndicator(
-                    progress = ratio,
+                    progress = { ratio },
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
@@ -744,8 +739,13 @@ fun ReaderScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
+                        )
+                    )
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -763,7 +763,11 @@ fun ReaderScreen(
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
                 )
                 
                 Text(
@@ -789,8 +793,13 @@ fun ReaderScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(16.dp),
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                        )
+                    )
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
