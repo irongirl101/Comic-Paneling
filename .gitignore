@@ -36,3 +36,16 @@ xcuserdata/
 # Packaged App Distribution (upload to GitHub Releases, don't commit)
 Panels.app/
 Panels-macOS.zip
+
+# Gradle and Android build files
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+gradlew
+gradlew.bat
+gradle/
+
+

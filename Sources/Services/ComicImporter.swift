@@ -3,6 +3,82 @@ import ZIPFoundation
 import CoreGraphics
 import AppKit
 
+#if canImport(SharedPaneling)
+import SharedPaneling
+
+class SwiftPlatformBridge: SharedComicImporterPlatformBridge {
+    func unzip(zipFilePath: String, destFolder: String) -> [String] {
+        let zipURL = URL(fileURLWithPath: zipFilePath)
+        let destURL = URL(fileURLWithPath: destFolder)
+        do {
+            try FileManager.default.unzipItem(at: zipURL, to: destURL)
+            var imageURLs: [URL] = []
+            let resourceKeys: [URLResourceKey] = [.isDirectoryKey]
+            guard let enumerator = FileManager.default.enumerator(at: destURL, includingPropertiesForKeys: resourceKeys, options: [.skipsHiddenFiles]) else {
+                return []
+            }
+            while let url = enumerator.nextObject() as? URL {
+                let resourceValues = try url.resourceValues(forKeys: Set(resourceKeys))
+                if let isDirectory = resourceValues.isDirectory, isDirectory {
+                    continue
+                }
+                let ext = url.pathExtension.lowercased()
+                if ["jpg", "jpeg", "png", "webp", "gif"].contains(ext) {
+                    imageURLs.append(url)
+                }
+            }
+            imageURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            return imageURLs.map { $0.path }
+        } catch {
+            return []
+        }
+    }
+
+    func getPixels(imagePath: String) -> SharedComicImporterPixelData? {
+        guard let nsImage = NSImage(contentsOfFile: imagePath),
+              let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        
+        let W = cgImage.width
+        let H = cgImage.height
+        
+        let maxDimension: CGFloat = 1024.0
+        let scale = min(1.0, maxDimension / CGFloat(max(W, H)))
+        let targetW = max(4, Int(CGFloat(W) * scale))
+        let targetH = max(4, Int(CGFloat(H) * scale))
+        
+        let bpp = 4
+        let bpr = bpp * targetW
+        var raw = [UInt8](repeating: 0, count: targetH * bpr)
+        
+        guard let ctx = CGContext(
+            data: &raw, width: targetW, height: targetH,
+            bitsPerComponent: 8, bytesPerRow: bpr,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+        
+        ctx.interpolationQuality = .medium
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: targetW, height: targetH))
+        
+        let ktRaw = KotlinByteArray.from(raw)
+        return SharedComicImporterPixelData(
+            raw: ktRaw,
+            width: Int32(targetW),
+            height: Int32(targetH),
+            bytesPerRow: Int32(bpr)
+        )
+    }
+
+    func generateUuid() -> String {
+        return UUID().uuidString
+    }
+}
+#endif
+
 public final class ComicImporter: Sendable {
     
     public static let shared = ComicImporter()
@@ -33,6 +109,21 @@ public final class ComicImporter: Sendable {
                 fileURL.stopAccessingSecurityScopedResource()
             }
         }
+        
+        #if canImport(SharedPaneling)
+        let bridge = SwiftPlatformBridge()
+        let ktBook = SharedComicImporter.shared.importComic(
+            bridge: bridge,
+            zipFilePath: fileURL.path,
+            destFolder: bookDir.path,
+            title: title,
+            author: author,
+            direction: direction.toKotlin()
+        )
+        let book = ComicBook(from: ktBook)
+        try saveMetadata(book, in: bookDir)
+        return book
+        #else
         
         try fileManager.unzipItem(at: fileURL, to: bookDir)
         
@@ -147,6 +238,7 @@ public final class ComicImporter: Sendable {
         
         try saveMetadata(book, in: bookDir)
         return book
+        #endif
     }
     
     public func loadImportedComics() -> [ComicBook] {
